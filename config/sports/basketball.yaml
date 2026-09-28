@@ -1,0 +1,175 @@
+# 농구 종목 설정 (초기 대상 리그: KBL)
+#  - 지표 코드는 접두어 없이 쓰고 category 로 묶는다. 순위 지표만 std. 접두어.
+#  - 팀 SEC 는 선수 출전 시간의 합 (정규 경기 = 40분 × 5명 = 12,000초).
+#  - PER 은 Hollinger 방식. 리그 평균 uPER(LG_UPER)은 리그 합계로 근사한다 (문서 참고).
+sport:
+  code: basketball
+  name_ko: 농구
+  name_en: Basketball
+  period_label_ko: 쿼터
+  score_unit_ko: 점
+  clock_type: countdown
+
+periods:
+  - {code: Q,  name_ko: 쿼터, label_pattern: "{n}쿼터",  regulation_count: 4, max_count: 4, nominal_duration_sec: 600}
+  - {code: OT, name_ko: 연장, label_pattern: "연장 {n}", regulation_count: 0, is_overtime: true, nominal_duration_sec: 300}
+
+positions:
+  - {code: G, name_ko: 가드,   name_en: Guard,   group: 가드}
+  - {code: F, name_ko: 포워드, name_en: Forward, group: 포워드}
+  - {code: C, name_ko: 센터,   name_en: Center,  group: 센터}
+
+event_types:
+  - code: SHOT
+    name_ko: 슛
+    participant_roles: [shooter, assister, blocker]
+    attr_schema:
+      type: object
+      properties:
+        shot_type: {enum: ["2PT", "3PT", "FT"]}
+        made: {type: boolean}
+        x: {type: number}
+        y: {type: number}
+  - {code: REBOUND,  name_ko: 리바운드, participant_roles: [rebounder],
+     attr_schema: {type: object, properties: {offensive: {type: boolean}}}}
+  - {code: TURNOVER, name_ko: 턴오버,   participant_roles: [player, stealer]}
+  - {code: FOUL,     name_ko: 파울,     participant_roles: [fouler, fouled],
+     attr_schema: {type: object, properties: {kind: {type: string}}}}
+  - {code: SUB,      name_ko: 선수 교체, participant_roles: [player_in, player_out]}
+  - {code: TIMEOUT,  name_ko: 작전 타임}
+
+stat_categories:
+  - {code: gen, name_ko: 출전,       name_en: General}
+  - {code: sco, name_ko: 득점·슈팅,  name_en: Scoring}
+  - {code: reb, name_ko: 리바운드,   name_en: Rebounding}
+  - {code: pla, name_ko: 플레이메이킹, name_en: Playmaking}
+  - {code: def, name_ko: 수비,       name_en: Defense}
+  - {code: adv, name_ko: 고급 지표,  name_en: Advanced}
+  - {code: std, name_ko: 순위,       name_en: Standings, scope: team, levels: [season]}
+
+stats:
+  # ---------------- 출전 ----------------
+  - {code: G,   category: gen, name_ko: 경기,      higher_is_better: null}
+  - {code: GS,  category: gen, name_ko: 선발 출전, higher_is_better: null}
+  - {code: SEC, category: gen, name_ko: 출전 시간(초), data_type: duration, higher_is_better: null}
+  - {code: MIN, category: gen, name_ko: 출전 시간, data_type: decimal, decimals: 1, unit: 분,
+     formula: "SEC / 60", higher_is_better: null}
+  - {code: PM,  category: gen, name_ko: 득실 마진, abbr: +/-}
+  # ---------------- 득점·슈팅 ----------------
+  - {code: PTS,   category: sco, name_ko: 득점, hot: true}
+  - {code: FGM,   category: sco, name_ko: 야투 성공}
+  - {code: FGA,   category: sco, name_ko: 야투 시도, higher_is_better: null}
+  - {code: FG3M,  category: sco, name_ko: 3점슛 성공, abbr: 3PM}
+  - {code: FG3A,  category: sco, name_ko: 3점슛 시도, abbr: 3PA, higher_is_better: null}
+  - {code: FTM,   category: sco, name_ko: 자유투 성공}
+  - {code: FTA,   category: sco, name_ko: 자유투 시도, higher_is_better: null}
+  - {code: FG_PCT,  category: sco, name_ko: 야투 성공률,   abbr: FG%,  data_type: percent, formula: "FGM / FGA"}
+  - {code: FG3_PCT, category: sco, name_ko: 3점슛 성공률,  abbr: 3P%,  data_type: percent, formula: "FG3M / FG3A"}
+  - {code: FT_PCT,  category: sco, name_ko: 자유투 성공률, abbr: FT%,  data_type: percent, formula: "FTM / FTA"}
+  - {code: EFG_PCT, category: sco, name_ko: 유효 야투율,   abbr: eFG%, data_type: percent,
+     formula: "(FGM + 0.5 * FG3M) / FGA"}
+  - {code: TS_PCT,  category: sco, name_ko: 트루 슈팅,     abbr: TS%,  data_type: percent,
+     formula: "PTS / (2 * (FGA + 0.44 * FTA))"}
+  # ---------------- 리바운드 ----------------
+  - {code: OREB, category: reb, name_ko: 공격 리바운드}
+  - {code: DREB, category: reb, name_ko: 수비 리바운드}
+  - {code: REB,  category: reb, name_ko: 리바운드, formula: "OREB + DREB", hot: true}
+  # ---------------- 플레이메이킹 ----------------
+  - {code: AST,     category: pla, name_ko: 어시스트, hot: true}
+  - {code: TOV,     category: pla, name_ko: 턴오버, higher_is_better: false}
+  - {code: AST_TOV, category: pla, name_ko: 어시스트/턴오버, abbr: AST/TO, data_type: decimal,
+     formula: "AST / TOV"}
+  # ---------------- 수비 ----------------
+  - {code: STL, category: def, name_ko: 스틸}
+  - {code: BLK, category: def, name_ko: 블록}
+  - {code: PF,  category: def, name_ko: 파울, higher_is_better: false}
+  # ---------------- 경기당 (시즌) ----------------
+  - {code: PTS_PG, category: sco, name_ko: 경기당 득점,     abbr: PPG, data_type: decimal, decimals: 1,
+     levels: [season], formula: "PTS / G"}
+  - {code: REB_PG, category: reb, name_ko: 경기당 리바운드, abbr: RPG, data_type: decimal, decimals: 1,
+     levels: [season], formula: "REB / G"}
+  - {code: AST_PG, category: pla, name_ko: 경기당 어시스트, abbr: APG, data_type: decimal, decimals: 1,
+     levels: [season], formula: "AST / G"}
+  # ---------------- 고급 지표 ----------------
+  - {code: EFF, category: adv, name_ko: 효율 지수, data_type: int,
+     formula: "PTS + REB + AST + STL + BLK - (FGA - FGM) - (FTA - FTM) - TOV"}
+  - {code: POSS, category: adv, name_ko: 공격 횟수(추정), scope: team, data_type: decimal, decimals: 1,
+     formula: "FGA + 0.44 * FTA - OREB + TOV", higher_is_better: null}
+  - code: UPER
+    category: adv
+    name_ko: 비보정 PER
+    abbr: uPER
+    scope: player
+    levels: [season]
+    data_type: decimal
+    formula: >-
+      (1 / (SEC / 60)) * (
+        FG3M
+        + (2 / 3) * AST
+        + (2 - lg.FACTOR * (team.AST / team.FGM)) * FGM
+        + FTM * 0.5 * (1 + (1 - team.AST / team.FGM) + (2 / 3) * (team.AST / team.FGM))
+        - lg.VOP * TOV
+        - lg.VOP * lg.DRB_PCT * (FGA - FGM)
+        - lg.VOP * 0.44 * (0.44 + 0.56 * lg.DRB_PCT) * (FTA - FTM)
+        + lg.VOP * (1 - lg.DRB_PCT) * (REB - OREB)
+        + lg.VOP * lg.DRB_PCT * OREB
+        + lg.VOP * STL
+        + lg.VOP * lg.DRB_PCT * BLK
+        - PF * (lg.FT_PER_PF - 0.44 * lg.FTA_PER_PF * lg.VOP)
+      )
+    higher_is_better: true
+  - code: PER
+    category: adv
+    name_ko: 선수 효율 지수
+    scope: player
+    levels: [season]
+    data_type: decimal
+    decimals: 1
+    formula: "UPER * (lg.POSS_PG / (team.POSS / team.G)) * (15 / lg.LG_UPER)"
+    description: 팀 페이스 보정 후 리그 평균 15 로 정규화. 시즌 합산 행(team_id 없음)은 팀 문맥이 없어 계산되지 않는다
+  # ---------------- 순위 (팀) ----------------
+  - {code: std.G,    name_ko: 경기, higher_is_better: null}
+  - {code: std.W,    name_ko: 승}
+  - {code: std.L,    name_ko: 패, higher_is_better: false}
+  - {code: std.GB,   name_ko: 게임차, data_type: decimal, decimals: 1, aggregation: last, higher_is_better: false}
+  - {code: std.WPCT, name_ko: 승률, data_type: ratio, formula: "std.W / (std.W + std.L)"}
+
+league_constants:
+  # 리그 합계(모든 팀 시즌 기록의 합)로 계산
+  - {code: VOP,        name_ko: 공격 1회당 득점 가치, formula: "PTS / (FGA - OREB + TOV + 0.44 * FTA)"}
+  - {code: DRB_PCT,    name_ko: 리그 수비 리바운드 비율, formula: "(REB - OREB) / REB"}
+  - {code: FACTOR,     name_ko: PER 어시스트 보정 계수,
+     formula: "(2 / 3) - (0.5 * (AST / FGM)) / (2 * (FGM / FTM))"}
+  - {code: FT_PER_PF,  name_ko: 파울당 자유투 성공, formula: "FTM / PF"}
+  - {code: FTA_PER_PF, name_ko: 파울당 자유투 시도, formula: "FTA / PF"}
+  - {code: POSS_PG,    name_ko: 팀 경기당 공격 횟수, formula: "POSS / G"}
+  - code: LG_UPER
+    name_ko: 리그 평균 uPER (근사)
+    description: 리그 합계를 한 명의 선수로 보고 uPER 을 계산한 값 (팀 어시스트 비율 = 리그 비율 가정)
+    formula: >-
+      (1 / (SEC / 60)) * (
+        FG3M
+        + (2 / 3) * AST
+        + (2 - lg.FACTOR * (AST / FGM)) * FGM
+        + FTM * 0.5 * (1 + (1 - AST / FGM) + (2 / 3) * (AST / FGM))
+        - lg.VOP * TOV
+        - lg.VOP * lg.DRB_PCT * (FGA - FGM)
+        - lg.VOP * 0.44 * (0.44 + 0.56 * lg.DRB_PCT) * (FTA - FTM)
+        + lg.VOP * (1 - lg.DRB_PCT) * (REB - OREB)
+        + lg.VOP * lg.DRB_PCT * OREB
+        + lg.VOP * STL
+        + lg.VOP * lg.DRB_PCT * BLK
+        - PF * (lg.FT_PER_PF - 0.44 * lg.FTA_PER_PF * lg.VOP)
+      )
+
+splits:
+  - {code: by_period, name_ko: 쿼터별, source: period, key: period.ordinal,
+     description: "1~4 = 쿼터, 5 이상 = 연장"}
+
+qualification_rules:
+  - code: scoring_title
+    category: sco
+    name_ko: 최소 출전 경기
+    rule: "G >= 0.5 * ctx.TEAM_GAMES"
+    provisional: true
+    description: KBL 공식 개인 순위 기준 확인 전 임시값 (팀 경기 수의 50% 이상 출전)

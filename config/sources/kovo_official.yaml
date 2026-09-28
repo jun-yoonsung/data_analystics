@@ -1,0 +1,8 @@
+# 한국배구연맹(KOVO) 공식 홈페이지 (4단계에서 약관·robots.txt 확인)
+code: kovo_official
+name: KOVO 공식 홈페이지
+base_url: https://www.kovo.co.kr
+robots_url: https://www.kovo.co.kr/robots.txt
+terms_note: 미확인 (4단계에서 확인 예정)
+collection_allowed: false
+min_interval_ms: 3000

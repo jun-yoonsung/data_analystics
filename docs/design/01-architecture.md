@@ -92,7 +92,7 @@ flowchart TD
     V --> RES["ID 해석<br/>external_id_map 조회/생성"]
     RES --> UP["자연키 기반 upsert<br/>core.*"]
     UP --> DER["파생 지표 계산<br/>stat_definition.formula + league_constant"]
-    DER --> MV["materialized view 갱신<br/>(해당 시즌만)"]
+    DER --> MV["materialized view 갱신<br/>(CONCURRENTLY)"]
     MV --> LOG["ingest.ingest_run 완료 기록<br/>건수·경고·에러"]
     V -. 실패 .-> ERR["ingest_run.status=failed<br/>→ Slack/Email 알림"]
     F -. 실패 .-> ERR

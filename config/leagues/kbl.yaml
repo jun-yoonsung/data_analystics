@@ -1,0 +1,22 @@
+# KBL (남자 프로농구). 시즌: 10월 ~ 이듬해 4~5월
+#  수집 시각(가정): 경기 14:00 ~ 19:00 시작 → 21:30 이전 종료. 4단계에서 조정.
+league:
+  code: KBL
+  sport: basketball
+  name_ko: KBL
+  name_en: Korean Basketball League
+  country: KR
+  gender: men
+  tier: 1
+  timezone: Asia/Seoul
+  collector_key: kbl_official
+
+schedules:
+  - {job_type: schedule,     source: kbl_official, cron: "15 6 * * *", offseason_policy: weekly,
+     params: {days_back: 3, days_ahead: 14}}
+  - {job_type: results,      source: kbl_official, cron: "40 22 * * *"}
+  - {job_type: boxscore,     source: kbl_official, cron: "45 22 * * *", params: {recheck_days: 2}}
+  - {job_type: events,       source: kbl_official, cron: "5 23 * * *"}
+  - {job_type: season_stats, source: kbl_official, cron: "20 23 * * *"}
+  - {job_type: standings,    source: kbl_official, cron: "25 23 * * *"}
+  - {job_type: roster,       source: kbl_official, cron: "10 9 * * 1", offseason_policy: weekly}

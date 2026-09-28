@@ -1,0 +1,22 @@
+# K리그1. 시즌: 2~3월 ~ 11~12월
+#  수집 시각(가정): 평일 19:30, 주말 14:00 ~ 19:30 시작 → 21:30 전후 종료. 4단계에서 조정.
+league:
+  code: KLEAGUE1
+  sport: football
+  name_ko: K리그1
+  name_en: K League 1
+  country: KR
+  gender: men
+  tier: 1
+  timezone: Asia/Seoul
+  collector_key: kleague_official
+
+schedules:
+  - {job_type: schedule,     source: kleague_official, cron: "25 6 * * *", offseason_policy: weekly,
+     params: {days_back: 3, days_ahead: 21}}
+  - {job_type: results,      source: kleague_official, cron: "35 23 * * *"}
+  - {job_type: boxscore,     source: kleague_official, cron: "40 23 * * *", params: {recheck_days: 2}}
+  - {job_type: events,       source: kleague_official, cron: "0 1 * * *"}
+  - {job_type: season_stats, source: kleague_official, cron: "20 1 * * *"}
+  - {job_type: standings,    source: kleague_official, cron: "25 1 * * *"}
+  - {job_type: roster,       source: kleague_official, cron: "20 9 * * 1", offseason_policy: weekly}

@@ -1,0 +1,216 @@
+# 야구 종목 설정 (초기 대상 리그: KBO)
+#  - 지표 코드: <카테고리>.<코드>  (bat=타격, pit=투구, fld=수비, std=순위)
+#  - 이닝은 아웃카운트(pit.OUTS)로 저장하고 IP 는 파생 지표로 계산한다 (6⅓이닝 = 19아웃).
+#  - formula 가 있으면 파생 지표. 비율 지표는 시즌 레벨에서 합산된 구성 요소로 재계산한다.
+sport:
+  code: baseball
+  name_ko: 야구
+  name_en: Baseball
+  period_label_ko: 이닝
+  score_unit_ko: 점
+  clock_type: none
+
+periods:
+  # 연장 이닝도 같은 INN 코드 (seq > regulation_count 이면 연장)
+  - {code: INN, name_ko: 이닝, label_pattern: "{n}회", regulation_count: 9}
+
+positions:
+  - {code: P,  name_ko: 투수,     name_en: Pitcher,          group: 투수}
+  - {code: C,  name_ko: 포수,     name_en: Catcher,          group: 포수}
+  - {code: 1B, name_ko: 1루수,    name_en: First Base,       group: 내야수}
+  - {code: 2B, name_ko: 2루수,    name_en: Second Base,      group: 내야수}
+  - {code: 3B, name_ko: 3루수,    name_en: Third Base,       group: 내야수}
+  - {code: SS, name_ko: 유격수,   name_en: Shortstop,        group: 내야수}
+  - {code: LF, name_ko: 좌익수,   name_en: Left Field,       group: 외야수}
+  - {code: CF, name_ko: 중견수,   name_en: Center Field,     group: 외야수}
+  - {code: RF, name_ko: 우익수,   name_en: Right Field,      group: 외야수}
+  - {code: DH, name_ko: 지명타자, name_en: Designated Hitter, group: 지명타자}
+  - {code: PH, name_ko: 대타,     name_en: Pinch Hitter,     group: 교체}
+  - {code: PR, name_ko: 대주자,   name_en: Pinch Runner,     group: 교체}
+
+event_types:
+  - code: PA
+    name_ko: 타석
+    participant_roles: [batter, pitcher]
+    attr_schema:
+      type: object
+      properties:
+        half: {enum: [top, bottom]}
+        result: {type: string, description: "타석 결과 코드 (1B, 2B, 3B, HR, BB, IBB, HBP, SO, GO, FO, SF, SH, E, FC, GDP ...)"}
+        batter_hand: {enum: [L, R, S]}
+        pitcher_hand: {enum: [L, R]}
+        outs_before: {type: integer, minimum: 0, maximum: 2}
+        runners_before: {type: string, pattern: "^[0-1]{3}$", description: "1·2·3루 주자 여부 (예: 101)"}
+        rbi: {type: integer, minimum: 0}
+        pitch_count: {type: integer, minimum: 0}
+  - code: PITCH
+    name_ko: 투구
+    participant_roles: [batter, pitcher]
+    attr_schema:
+      type: object
+      properties:
+        pitch_type: {type: string}
+        speed_kmh: {type: number}
+        result: {type: string}
+        balls_before: {type: integer}
+        strikes_before: {type: integer}
+  - code: BASERUNNING
+    name_ko: 주루
+    participant_roles: [runner, catcher, pitcher]
+    attr_schema:
+      type: object
+      properties:
+        kind: {enum: [SB, CS, PO, WP, PB, BK, ADV]}
+  - code: SUB
+    name_ko: 선수 교체
+    participant_roles: [player_in, player_out]
+    attr_schema:
+      type: object
+      properties:
+        kind: {enum: [pitching_change, pinch_hitter, pinch_runner, defensive]}
+
+stat_categories:
+  - {code: bat, name_ko: 타격, name_en: Batting}
+  - {code: pit, name_ko: 투구, name_en: Pitching}
+  - {code: fld, name_ko: 수비, name_en: Fielding}
+  - {code: std, name_ko: 순위, name_en: Standings, scope: team, levels: [season]}
+
+stats:
+  # ---------------- 타격: 원시 ----------------
+  - {code: bat.G,   name_ko: 경기,       higher_is_better: null}
+  - {code: bat.PA,  name_ko: 타석,       higher_is_better: null, hot: true}
+  - {code: bat.AB,  name_ko: 타수,       higher_is_better: null}
+  - {code: bat.R,   name_ko: 득점}
+  - {code: bat.H,   name_ko: 안타,       hot: true}
+  - {code: bat.DBL, name_ko: 2루타,      abbr: 2B}
+  - {code: bat.TPL, name_ko: 3루타,      abbr: 3B}
+  - {code: bat.HR,  name_ko: 홈런,       hot: true}
+  - {code: bat.RBI, name_ko: 타점}
+  - {code: bat.SB,  name_ko: 도루}
+  - {code: bat.CS,  name_ko: 도루 실패,  higher_is_better: false}
+  - {code: bat.BB,  name_ko: 볼넷}
+  - {code: bat.IBB, name_ko: 고의4구}
+  - {code: bat.HBP, name_ko: 사구}
+  - {code: bat.SO,  name_ko: 삼진,       higher_is_better: false}
+  - {code: bat.GDP, name_ko: 병살타,     higher_is_better: false}
+  - {code: bat.SH,  name_ko: 희생번트}
+  - {code: bat.SF,  name_ko: 희생플라이}
+  # ---------------- 타격: 파생 ----------------
+  - {code: bat.TB,    name_ko: 루타,      data_type: int,   formula: "bat.H + bat.DBL + 2 * bat.TPL + 3 * bat.HR"}
+  - {code: bat.AVG,   name_ko: 타율,      data_type: ratio, formula: "bat.H / bat.AB"}
+  - {code: bat.OBP,   name_ko: 출루율,    data_type: ratio,
+     formula: "(bat.H + bat.BB + bat.HBP) / (bat.AB + bat.BB + bat.HBP + bat.SF)"}
+  - {code: bat.SLG,   name_ko: 장타율,    data_type: ratio, formula: "bat.TB / bat.AB"}
+  - {code: bat.OPS,   name_ko: OPS,       data_type: ratio, formula: "bat.OBP + bat.SLG"}
+  - {code: bat.ISO,   name_ko: 순수장타율, data_type: ratio, formula: "bat.SLG - bat.AVG"}
+  - {code: bat.BABIP, name_ko: 인플레이 타구 타율, data_type: ratio,
+     formula: "(bat.H - bat.HR) / (bat.AB - bat.SO - bat.HR + bat.SF)"}
+  - {code: bat.BB_PCT, name_ko: 볼넷 비율, abbr: BB%, data_type: percent, formula: "bat.BB / bat.PA"}
+  - {code: bat.K_PCT,  name_ko: 삼진 비율, abbr: K%,  data_type: percent, formula: "bat.SO / bat.PA",
+     higher_is_better: false}
+  - code: bat.WOBA
+    name_ko: 가중 출루율
+    abbr: wOBA
+    data_type: ratio
+    formula: >-
+      (lg.WOBA_WBB * (bat.BB - bat.IBB) + lg.WOBA_WHBP * bat.HBP
+       + lg.WOBA_W1B * (bat.H - bat.DBL - bat.TPL - bat.HR)
+       + lg.WOBA_W2B * bat.DBL + lg.WOBA_W3B * bat.TPL + lg.WOBA_WHR * bat.HR)
+      / (bat.AB + bat.BB - bat.IBB + bat.SF + bat.HBP)
+    description: 가중치는 시즌별 리그 상수 (득점 기대값 기반, 수동 입력 또는 외부 출처)
+
+  # ---------------- 투구: 원시 ----------------
+  - {code: pit.G,    name_ko: 등판,       higher_is_better: null}
+  - {code: pit.GS,   name_ko: 선발 등판,  higher_is_better: null}
+  - {code: pit.W,    name_ko: 승리}
+  - {code: pit.L,    name_ko: 패배,       higher_is_better: false}
+  - {code: pit.SV,   name_ko: 세이브}
+  - {code: pit.HLD,  name_ko: 홀드}
+  - {code: pit.BSV,  name_ko: 블론세이브, higher_is_better: false}
+  - {code: pit.CG,   name_ko: 완투}
+  - {code: pit.SHO,  name_ko: 완봉}
+  - {code: pit.QS,   name_ko: 퀄리티스타트}
+  - {code: pit.TBF,  name_ko: 상대 타자,  higher_is_better: null}
+  - {code: pit.OUTS, name_ko: 아웃카운트, higher_is_better: null, hot: true,
+     description: "이닝 × 3. 소스의 '6 1/3' 표기는 수집기가 19 로 변환한다"}
+  - {code: pit.NP,   name_ko: 투구 수,    higher_is_better: null}
+  - {code: pit.H,    name_ko: 피안타,     higher_is_better: false}
+  - {code: pit.HR,   name_ko: 피홈런,     higher_is_better: false}
+  - {code: pit.BB,   name_ko: 볼넷,       higher_is_better: false}
+  - {code: pit.IBB,  name_ko: 고의4구,    higher_is_better: false}
+  - {code: pit.HBP,  name_ko: 사구,       higher_is_better: false}
+  - {code: pit.SO,   name_ko: 탈삼진}
+  - {code: pit.R,    name_ko: 실점,       higher_is_better: false}
+  - {code: pit.ER,   name_ko: 자책점,     higher_is_better: false}
+  - {code: pit.WP,   name_ko: 폭투,       higher_is_better: false}
+  - {code: pit.BK,   name_ko: 보크,       higher_is_better: false}
+  # ---------------- 투구: 파생 ----------------
+  - {code: pit.IP,   name_ko: 이닝,       data_type: innings, formula: "pit.OUTS / 3", higher_is_better: null}
+  - {code: pit.ERA,  name_ko: 평균자책점, data_type: decimal, formula: "27 * pit.ER / pit.OUTS",
+     higher_is_better: false, hot: true}
+  - {code: pit.WHIP, name_ko: WHIP,       data_type: decimal, formula: "3 * (pit.BB + pit.H) / pit.OUTS",
+     higher_is_better: false}
+  - {code: pit.K9,   name_ko: 9이닝당 탈삼진, abbr: K/9,  data_type: decimal, formula: "27 * pit.SO / pit.OUTS"}
+  - {code: pit.BB9,  name_ko: 9이닝당 볼넷,   abbr: BB/9, data_type: decimal, formula: "27 * pit.BB / pit.OUTS",
+     higher_is_better: false}
+  - {code: pit.HR9,  name_ko: 9이닝당 피홈런, abbr: HR/9, data_type: decimal, formula: "27 * pit.HR / pit.OUTS",
+     higher_is_better: false}
+  - {code: pit.K_BB, name_ko: 삼진/볼넷 비율, abbr: K/BB, data_type: decimal, formula: "pit.SO / pit.BB"}
+  - {code: pit.K_PCT,  name_ko: 탈삼진 비율, abbr: K%,  data_type: percent, formula: "pit.SO / pit.TBF"}
+  - {code: pit.BB_PCT, name_ko: 볼넷 비율,   abbr: BB%, data_type: percent, formula: "pit.BB / pit.TBF",
+     higher_is_better: false}
+  - {code: pit.WPCT, name_ko: 승률, data_type: ratio, formula: "pit.W / (pit.W + pit.L)"}
+  - code: pit.FIP
+    name_ko: 수비 무관 평균자책점
+    abbr: FIP
+    data_type: decimal
+    higher_is_better: false
+    formula: "3 * (13 * pit.HR + 3 * (pit.BB + pit.HBP) - 2 * pit.SO) / pit.OUTS + lg.FIP_C"
+
+  # ---------------- 수비 ----------------
+  - {code: fld.G,    name_ko: 수비 경기,     higher_is_better: null}
+  - {code: fld.OUTS, name_ko: 수비 아웃카운트, higher_is_better: null, description: 수비 이닝 × 3}
+  - {code: fld.PO,   name_ko: 자살}
+  - {code: fld.A,    name_ko: 보살}
+  - {code: fld.E,    name_ko: 실책, higher_is_better: false}
+  - {code: fld.DP,   name_ko: 병살 참여}
+  - {code: fld.INN,  name_ko: 수비 이닝, data_type: innings, formula: "fld.OUTS / 3", higher_is_better: null}
+  - {code: fld.FPCT, name_ko: 수비율,    data_type: ratio,   formula: "(fld.PO + fld.A) / (fld.PO + fld.A + fld.E)"}
+
+  # ---------------- 순위 (팀) ----------------
+  - {code: std.G,    name_ko: 경기, higher_is_better: null}
+  - {code: std.W,    name_ko: 승}
+  - {code: std.L,    name_ko: 패, higher_is_better: false}
+  - {code: std.D,    name_ko: 무, higher_is_better: null}
+  - {code: std.GB,   name_ko: 게임차, data_type: decimal, decimals: 1, aggregation: last, higher_is_better: false}
+  - {code: std.WPCT, name_ko: 승률, data_type: ratio, formula: "std.W / (std.W + std.L)",
+     description: KBO 승률은 무승부를 제외하고 계산한다}
+
+league_constants:
+  # wOBA 가중치: 득점 기대값 표 기반이라 리그 합계만으로는 계산할 수 없음 → 수동 입력(출처 기록)
+  - {code: WOBA_WBB,  name_ko: wOBA 볼넷 가중치}
+  - {code: WOBA_WHBP, name_ko: wOBA 사구 가중치}
+  - {code: WOBA_W1B,  name_ko: wOBA 1루타 가중치}
+  - {code: WOBA_W2B,  name_ko: wOBA 2루타 가중치}
+  - {code: WOBA_W3B,  name_ko: wOBA 3루타 가중치}
+  - {code: WOBA_WHR,  name_ko: wOBA 홈런 가중치}
+  - {code: LG_ERA, name_ko: 리그 평균자책점, formula: "27 * pit.ER / pit.OUTS"}
+  - code: FIP_C
+    name_ko: FIP 상수
+    formula: "lg.LG_ERA - 3 * (13 * pit.HR + 3 * (pit.BB + pit.HBP) - 2 * pit.SO) / pit.OUTS"
+    description: 리그 FIP 평균이 리그 ERA 와 같아지도록 맞추는 상수
+
+splits:
+  - {code: vs_pitcher_hand, name_ko: 상대 투수 유형, source: event, key: event.attrs.pitcher_hand,
+     value_labels: {L: 좌투수, R: 우투수}, description: 타자 기준. PA 이벤트가 필요하다}
+  - {code: vs_batter_hand, name_ko: 상대 타자 유형, source: event, key: event.attrs.batter_hand,
+     value_labels: {L: 좌타자, R: 우타자, S: 양타}, description: 투수 기준. PA 이벤트가 필요하다}
+  - {code: runners, name_ko: 주자 상황, source: event, key: event.attrs.runners_before,
+     value_labels: {"000": 주자 없음}, description: 득점권 등은 화면에서 값 묶음으로 표현}
+  - {code: by_inning, name_ko: 이닝별, source: period, key: period.seq}
+
+qualification_rules:
+  - {code: batting_title, category: bat, name_ko: 규정 타석, rule: "bat.PA >= 3.1 * ctx.TEAM_GAMES",
+     description: 팀 경기 수 × 3.1 타석}
+  - {code: pitching_title, category: pit, name_ko: 규정 이닝, rule: "pit.OUTS >= 3 * ctx.TEAM_GAMES",
+     description: 팀 경기 수 × 1 이닝}

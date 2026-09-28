@@ -1,0 +1,10 @@
+# KBO 공식 홈페이지
+#  3단계(야구 수집기)에서 robots.txt 와 이용약관을 확인한 뒤 결과를 terms_note 에 기록하고
+#  허용되는 경우에만 collection_allowed 를 true 로 바꾼다.
+code: kbo_official
+name: KBO 공식 홈페이지
+base_url: https://www.koreabaseball.com
+robots_url: https://www.koreabaseball.com/robots.txt
+terms_note: 미확인 (3단계에서 확인 예정)
+collection_allowed: false
+min_interval_ms: 3000

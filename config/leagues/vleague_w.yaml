@@ -1,0 +1,22 @@
+# V-리그 여자부. 시즌: 10월 ~ 이듬해 3~4월
+#  수집 시각(가정): 평일 19:00, 주말 14:00·16:00 시작 → 22:00 이전 종료. 4단계에서 조정.
+league:
+  code: VLEAGUE_W
+  sport: volleyball
+  name_ko: V-리그 여자부
+  name_en: V-League Women's
+  country: KR
+  gender: women
+  tier: 1
+  timezone: Asia/Seoul
+  collector_key: kovo_official
+  settings: {kovo_division: women}
+
+schedules:
+  - {job_type: schedule,     source: kovo_official, cron: "20 6 * * *", offseason_policy: weekly,
+     params: {days_back: 3, days_ahead: 14}}
+  - {job_type: results,      source: kovo_official, cron: "40 22 * * *"}
+  - {job_type: boxscore,     source: kovo_official, cron: "45 22 * * *", params: {recheck_days: 2}}
+  - {job_type: season_stats, source: kovo_official, cron: "15 23 * * *"}
+  - {job_type: standings,    source: kovo_official, cron: "20 23 * * *"}
+  - {job_type: roster,       source: kovo_official, cron: "15 9 * * 1", offseason_policy: weekly}

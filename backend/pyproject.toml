@@ -1,0 +1,27 @@
+[project]
+name = "sports-analytics-backend"
+version = "0.1.0"
+description = "멀티 스포츠 데이터 분석 플랫폼 백엔드 (API, 수집 워커, 설정 동기화)"
+requires-python = ">=3.11"
+dependencies = [
+    "alembic>=1.13",
+    "sqlalchemy>=2.0",
+    "psycopg[binary]>=3.1",
+    "pydantic>=2.6",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*", "config_sync*", "stats_engine*", "migrations*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = ["db: PostgreSQL 이 필요한 테스트 (TEST_DATABASE_URL 미설정 시 건너뜀)"]

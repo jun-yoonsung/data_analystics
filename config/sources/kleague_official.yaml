@@ -1,0 +1,8 @@
+# 한국프로축구연맹 K리그 공식 홈페이지/데이터 포털 (4단계에서 약관·robots.txt 확인)
+code: kleague_official
+name: K리그 공식 홈페이지
+base_url: https://www.kleague.com
+robots_url: https://www.kleague.com/robots.txt
+terms_note: 미확인 (4단계에서 확인 예정)
+collection_allowed: false
+min_interval_ms: 3000

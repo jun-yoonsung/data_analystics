@@ -1,0 +1,120 @@
+# 배구 종목 설정 (초기 대상 리그: V-리그 남자부/여자부)
+#  - 지표 코드는 접두어 없이 쓰고 category 로 묶는다. 순위 지표만 std. 접두어.
+#  - 성공률·효율은 0~1 로 저장하고 화면에서 % 로 표시한다 (data_type: percent).
+sport:
+  code: volleyball
+  name_ko: 배구
+  name_en: Volleyball
+  period_label_ko: 세트
+  score_unit_ko: 점
+  clock_type: none
+
+periods:
+  # 5세트제 (1~4세트 25점, 5세트 15점). 3세트 선승으로 끝나면 3~4개 세트만 존재
+  - {code: SET, name_ko: 세트, label_pattern: "{n}세트", regulation_count: 5, max_count: 5}
+
+positions:
+  - {code: OH, name_ko: 아웃사이드 히터, name_en: Outside Hitter, group: 공격수}
+  - {code: OP, name_ko: 아포짓,         name_en: Opposite,       group: 공격수}
+  - {code: MB, name_ko: 미들 블로커,    name_en: Middle Blocker, group: 미들 블로커}
+  - {code: S,  name_ko: 세터,           name_en: Setter,         group: 세터}
+  - {code: L,  name_ko: 리베로,         name_en: Libero,         group: 리베로}
+
+event_types:
+  - code: RALLY
+    name_ko: 랠리(득점)
+    participant_roles: [scorer]
+    attr_schema:
+      type: object
+      properties:
+        skill: {enum: [attack, block, serve, opponent_error]}
+        serving_team: {enum: [home, away]}
+  - {code: SUB,       name_ko: 선수 교체,  participant_roles: [player_in, player_out]}
+  - {code: TIMEOUT,   name_ko: 작전 타임}
+  - {code: CHALLENGE, name_ko: 비디오 판독,
+     attr_schema: {type: object, properties: {result: {enum: [overturned, upheld]}}}}
+
+stat_categories:
+  - {code: gen, name_ko: 출전,   name_en: General}
+  - {code: sco, name_ko: 득점,   name_en: Scoring}
+  - {code: atk, name_ko: 공격,   name_en: Attack}
+  - {code: srv, name_ko: 서브,   name_en: Serve}
+  - {code: blk, name_ko: 블로킹, name_en: Block}
+  - {code: dig, name_ko: 디그,   name_en: Dig}
+  - {code: set, name_ko: 세트(토스), name_en: Setting}
+  - {code: rcv, name_ko: 리시브, name_en: Reception}
+  - {code: flt, name_ko: 범실,   name_en: Faults}
+  - {code: std, name_ko: 순위,   name_en: Standings, scope: team, levels: [season]}
+
+stats:
+  # ---------------- 출전 ----------------
+  - {code: G,    category: gen, name_ko: 경기,      higher_is_better: null}
+  - {code: SETS, category: gen, name_ko: 출전 세트, higher_is_better: null}
+  # ---------------- 득점 ----------------
+  - {code: PTS, category: sco, name_ko: 득점, hot: true}
+  # ---------------- 공격 ----------------
+  - {code: ATK_ATT,  category: atk, name_ko: 공격 시도, higher_is_better: null}
+  - {code: ATK_KILL, category: atk, name_ko: 공격 성공}
+  - {code: ATK_ERR,  category: atk, name_ko: 공격 범실, higher_is_better: false}
+  - {code: ATK_BLKD, category: atk, name_ko: 공격 차단당함, higher_is_better: false}
+  - {code: ATK_PCT,  category: atk, name_ko: 공격 성공률, data_type: percent, formula: "ATK_KILL / ATK_ATT", hot: true}
+  - {code: ATK_EFF,  category: atk, name_ko: 공격 효율,   data_type: percent,
+     formula: "(ATK_KILL - ATK_ERR - ATK_BLKD) / ATK_ATT"}
+  # ---------------- 서브 ----------------
+  - {code: SRV_ATT,    category: srv, name_ko: 서브 시도, higher_is_better: null}
+  - {code: SRV_ACE,    category: srv, name_ko: 서브 에이스}
+  - {code: SRV_ERR,    category: srv, name_ko: 서브 범실, higher_is_better: false}
+  - {code: SRV_ACE_PS, category: srv, name_ko: 세트당 서브 에이스, data_type: decimal, decimals: 3,
+     formula: "SRV_ACE / SETS"}
+  # ---------------- 블로킹 ----------------
+  - {code: BLK_PT,    category: blk, name_ko: 블로킹 득점}
+  - {code: BLK_TOUCH, category: blk, name_ko: 유효 블로킹}
+  - {code: BLK_ERR,   category: blk, name_ko: 블로킹 범실, higher_is_better: false}
+  - {code: BLK_PS,    category: blk, name_ko: 세트당 블로킹, data_type: decimal, decimals: 3,
+     formula: "BLK_PT / SETS"}
+  # ---------------- 디그 ----------------
+  - {code: DIG_ATT, category: dig, name_ko: 디그 시도, higher_is_better: null}
+  - {code: DIG_SUC, category: dig, name_ko: 디그 성공}
+  - {code: DIG_PCT, category: dig, name_ko: 디그 성공률, data_type: percent, formula: "DIG_SUC / DIG_ATT"}
+  - {code: DIG_PS,  category: dig, name_ko: 세트당 디그, data_type: decimal, decimals: 3, formula: "DIG_SUC / SETS"}
+  # ---------------- 세트(토스) ----------------
+  - {code: SET_ATT, category: set, name_ko: 세트 시도, higher_is_better: null}
+  - {code: SET_SUC, category: set, name_ko: 세트 성공}
+  - {code: SET_PS,  category: set, name_ko: 세트당 세트 성공, data_type: decimal, decimals: 3, formula: "SET_SUC / SETS"}
+  # ---------------- 리시브 ----------------
+  - {code: RCV_ATT, category: rcv, name_ko: 리시브 시도, higher_is_better: null}
+  - {code: RCV_EXC, category: rcv, name_ko: 리시브 정확}
+  - {code: RCV_ERR, category: rcv, name_ko: 리시브 실패, higher_is_better: false}
+  - {code: RCV_EFF, category: rcv, name_ko: 리시브 효율, data_type: percent,
+     formula: "(RCV_EXC - RCV_ERR) / RCV_ATT"}
+  # ---------------- 범실 ----------------
+  - {code: FLT, category: flt, name_ko: 범실, higher_is_better: false}
+  # ---------------- 순위 (팀) ----------------
+  - {code: std.G,     name_ko: 경기, higher_is_better: null}
+  - {code: std.W,     name_ko: 승}
+  - {code: std.L,     name_ko: 패, higher_is_better: false}
+  - {code: std.PTS,   name_ko: 승점,
+     description: "V-리그 승점 (3-0/3-1 승 3점, 3-2 승 2점, 2-3 패 1점). 소스 값을 그대로 사용"}
+  - {code: std.SET_W, name_ko: 세트 득}
+  - {code: std.SET_L, name_ko: 세트 실, higher_is_better: false}
+  - {code: std.PT_W,  name_ko: 총 득점}
+  - {code: std.PT_L,  name_ko: 총 실점, higher_is_better: false}
+  - {code: std.SET_RATIO, name_ko: 세트 득실률, data_type: decimal, decimals: 3, formula: "std.SET_W / std.SET_L"}
+  - {code: std.PT_RATIO,  name_ko: 점수 득실률, data_type: decimal, decimals: 3, formula: "std.PT_W / std.PT_L"}
+
+splits:
+  - {code: by_set, name_ko: 세트별, source: period, key: period.seq}
+
+qualification_rules:
+  - code: attack_title
+    category: atk
+    name_ko: 공격 순위 기준
+    rule: "SETS >= 0.5 * ctx.TEAM_PERIODS"
+    provisional: true
+    description: KOVO 공식 개인 순위 기준 확인 전 임시값 (팀 세트 수의 50% 이상 출전)
+  - code: reception_title
+    category: rcv
+    name_ko: 리시브 순위 기준
+    rule: "SETS >= 0.5 * ctx.TEAM_PERIODS"
+    provisional: true
+    description: KOVO 공식 개인 순위 기준 확인 전 임시값

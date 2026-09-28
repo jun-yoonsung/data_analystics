@@ -1,0 +1,25 @@
+# KBO 리그
+#  수집 시각(가정): 평일 18:30, 주말 14:00~17:00 경기 → 대부분 22:30 이전 종료.
+#  3단계에서 소스의 갱신 시점을 확인한 뒤 조정한다. cron 은 timezone(Asia/Seoul) 기준.
+league:
+  code: KBO
+  sport: baseball
+  name_ko: KBO 리그
+  name_en: KBO League
+  country: KR
+  gender: men
+  tier: 1
+  timezone: Asia/Seoul
+  collector_key: kbo_official
+
+schedules:
+  - {job_type: schedule,     source: kbo_official, cron: "10 6 * * *",  offseason_policy: weekly,
+     params: {days_back: 3, days_ahead: 14}}
+  - {job_type: results,      source: kbo_official, cron: "50 23 * * *"}
+  - {job_type: boxscore,     source: kbo_official, cron: "55 23 * * *",
+     params: {recheck_days: 2, note: "다음 날 오전 정정 반영을 위해 최근 2일 재수집"}}
+  - {job_type: events,       source: kbo_official, cron: "20 0 * * *"}
+  - {job_type: season_stats, source: kbo_official, cron: "40 0 * * *"}
+  - {job_type: standings,    source: kbo_official, cron: "45 0 * * *"}
+  - {job_type: roster,       source: kbo_official, cron: "10 18 * * *", offseason_policy: weekly,
+     params: {note: "1군 등록·말소 공시 반영"}}

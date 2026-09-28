@@ -1,0 +1,11 @@
+# 모든 종목 공통 설정 (config.split_definition 의 sport_id = NULL)
+#  key 는 스플릿 엔진이 해석하는 경로이며, match.* 값은 조회 대상(선수/팀) 기준으로 계산된다.
+splits:
+  - {code: home_away, name_ko: 홈/원정,  source: match, key: match.home_away, value_labels: {home: 홈, away: 원정}}
+  - {code: month,     name_ko: 월별,     source: match, key: match.month}
+  - {code: weekday,   name_ko: 요일별,   source: match, key: match.weekday}
+  - {code: opponent,  name_ko: 상대팀,   source: match, key: match.opponent_team_id}
+  - {code: venue,     name_ko: 경기장,   source: match, key: match.venue_id}
+  - {code: stage,     name_ko: 대회 단계, source: match, key: match.stage_type}
+  - {code: result,    name_ko: 경기 결과, source: match, key: match.result,
+     value_labels: {win: 승, loss: 패, draw: 무}}

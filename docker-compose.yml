@@ -1,0 +1,38 @@
+# 2단계 구성: db + migrate(1회성). 이후 단계에서 backend / worker / scheduler / redis / frontend 추가.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: sports
+      POSTGRES_USER: ${POSTGRES_USER:-sports_owner}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 를 .env 에 설정하세요}
+      APP_API_PASSWORD: ${APP_API_PASSWORD:?}
+      APP_INGEST_PASSWORD: ${APP_INGEST_PASSWORD:?}
+      APP_READONLY_PASSWORD: ${APP_READONLY_PASSWORD:?}
+      TZ: Asia/Seoul
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/db/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d sports"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # 스키마 마이그레이션 + 종목/리그/소스 설정 동기화 (소유자 계정으로 실행)
+  migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sports_owner}:${POSTGRES_PASSWORD}@db:5432/sports
+    command: ["sh", "-c", "alembic upgrade head && python -m app.cli sync-config"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  pgdata:

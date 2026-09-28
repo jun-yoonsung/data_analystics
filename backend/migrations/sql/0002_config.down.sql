@@ -1,0 +1,9 @@
+DROP TABLE IF EXISTS config.qualification_rule;
+DROP TABLE IF EXISTS config.split_definition;
+DROP TABLE IF EXISTS config.league_constant_definition;
+DROP TABLE IF EXISTS config.stat_definition;
+DROP TABLE IF EXISTS config.stat_category;
+DROP TABLE IF EXISTS config.event_type_definition;
+DROP TABLE IF EXISTS config.position_definition;
+DROP TABLE IF EXISTS config.period_definition;
+DROP TABLE IF EXISTS config.sport;

@@ -1,0 +1,138 @@
+# 축구 종목 설정 (초기 대상 리그: K리그1)
+#  - 지표 코드는 접두어 없이 쓰고 category 로 묶는다. 순위 지표만 std. 접두어.
+#  - xG 는 소스가 제공할 때만 수집한다 (자체 모델로 계산하지 않음).
+sport:
+  code: football
+  name_ko: 축구
+  name_en: Football
+  period_label_ko: 하프
+  score_unit_ko: 골
+  clock_type: countup
+
+periods:
+  - {code: H,   name_ko: 하프,     label_pattern: "{n}H",         regulation_count: 2, max_count: 2, nominal_duration_sec: 2700}
+  - {code: ET,  name_ko: 연장,     label_pattern: "연장 {n}",     regulation_count: 0, max_count: 2, is_overtime: true, nominal_duration_sec: 900}
+  - {code: PSO, name_ko: 승부차기, label_pattern: "승부차기",     regulation_count: 0, max_count: 1, is_overtime: true}
+
+positions:
+  - {code: GK, name_ko: 골키퍼,   name_en: Goalkeeper, group: 골키퍼}
+  - {code: DF, name_ko: 수비수,   name_en: Defender,   group: 수비수}
+  - {code: MF, name_ko: 미드필더, name_en: Midfielder, group: 미드필더}
+  - {code: FW, name_ko: 공격수,   name_en: Forward,    group: 공격수}
+
+event_types:
+  - code: GOAL
+    name_ko: 득점
+    participant_roles: [scorer, assister]
+    attr_schema:
+      type: object
+      properties:
+        minute: {type: integer}
+        added_time: {type: integer}
+        penalty: {type: boolean}
+        own_goal: {type: boolean}
+        body_part: {enum: [left_foot, right_foot, head, other]}
+  - code: SHOT
+    name_ko: 슈팅
+    participant_roles: [shooter]
+    attr_schema:
+      type: object
+      properties:
+        minute: {type: integer}
+        on_target: {type: boolean}
+        xg: {type: number}
+  - code: CARD
+    name_ko: 카드
+    participant_roles: [player]
+    attr_schema: {type: object, properties: {minute: {type: integer}, color: {enum: ["Y", "R", "YR"]}}}
+  - code: SUB
+    name_ko: 선수 교체
+    participant_roles: [player_in, player_out]
+    attr_schema: {type: object, properties: {minute: {type: integer}}}
+  - code: PSO_KICK
+    name_ko: 승부차기 킥
+    participant_roles: [kicker, goalkeeper]
+    attr_schema: {type: object, properties: {scored: {type: boolean}}}
+
+stat_categories:
+  - {code: gen, name_ko: 출전,     name_en: General}
+  - {code: att, name_ko: 공격,     name_en: Attacking}
+  - {code: pas, name_ko: 패스,     name_en: Passing}
+  - {code: def, name_ko: 수비,     name_en: Defending}
+  - {code: dis, name_ko: 파울·징계, name_en: Discipline}
+  - {code: gk,  name_ko: 골키핑,   name_en: Goalkeeping}
+  - {code: std, name_ko: 순위,     name_en: Standings, scope: team, levels: [season]}
+
+stats:
+  # ---------------- 출전 ----------------
+  - {code: G,   category: gen, name_ko: 출전 경기, higher_is_better: null}
+  - {code: GS,  category: gen, name_ko: 선발 출전, higher_is_better: null}
+  - {code: SEC, category: gen, name_ko: 출전 시간(초), data_type: duration, higher_is_better: null}
+  - {code: MIN, category: gen, name_ko: 출전 시간, data_type: int, unit: 분, formula: "SEC / 60",
+     higher_is_better: null}
+  # ---------------- 공격 ----------------
+  - {code: GLS,    category: att, name_ko: 골, hot: true}
+  - {code: AST,    category: att, name_ko: 어시스트, hot: true}
+  - {code: SHT,    category: att, name_ko: 슈팅}
+  - {code: SOT,    category: att, name_ko: 유효 슈팅}
+  - {code: PK_G,   category: att, name_ko: 페널티킥 골}
+  - {code: PK_ATT, category: att, name_ko: 페널티킥 시도, higher_is_better: null}
+  - {code: "OFF",   category: att, name_ko: 오프사이드, higher_is_better: false}
+  - {code: XG,     category: att, name_ko: 기대 득점, abbr: xG, data_type: decimal,
+     description: 소스가 제공하는 경우에만 값이 있다}
+  - {code: G_A,     category: att, name_ko: 공격 포인트, abbr: G+A, formula: "GLS + AST"}
+  - {code: SOT_PCT, category: att, name_ko: 유효 슈팅 비율, data_type: percent, formula: "SOT / SHT"}
+  - {code: CONV,    category: att, name_ko: 슈팅 대비 득점률, data_type: percent, formula: "GLS / SHT"}
+  - {code: XG_DIFF, category: att, name_ko: 골 - xG, abbr: G-xG, data_type: decimal, formula: "GLS - XG"}
+  - {code: GLS_P90, category: att, name_ko: 90분당 골, data_type: decimal, levels: [season], scope: player,
+     formula: "GLS * 5400 / SEC"}
+  - {code: G_A_P90, category: att, name_ko: 90분당 공격 포인트, data_type: decimal, levels: [season], scope: player,
+     formula: "(GLS + AST) * 5400 / SEC"}
+  # ---------------- 패스 ----------------
+  - {code: PAS_ATT, category: pas, name_ko: 패스 시도, higher_is_better: null}
+  - {code: PAS_CMP, category: pas, name_ko: 패스 성공}
+  - {code: KEY_PAS, category: pas, name_ko: 키패스}
+  - {code: PAS_PCT, category: pas, name_ko: 패스 성공률, data_type: percent, formula: "PAS_CMP / PAS_ATT"}
+  # ---------------- 수비 ----------------
+  - {code: TKL, category: def, name_ko: 태클}
+  - {code: INT, category: def, name_ko: 인터셉트}
+  - {code: CLR, category: def, name_ko: 클리어링}
+  - {code: BLK, category: def, name_ko: 슈팅 차단}
+  # ---------------- 파울·징계 ----------------
+  - {code: FOUL, category: dis, name_ko: 파울, higher_is_better: false}
+  - {code: FLD,  category: dis, name_ko: 피파울}
+  - {code: YC,   category: dis, name_ko: 경고, higher_is_better: false}
+  - {code: RC,   category: dis, name_ko: 퇴장, higher_is_better: false}
+  # ---------------- 골키핑 ----------------
+  - {code: SAV,     category: gk, name_ko: 선방}
+  - {code: GA,      category: gk, name_ko: 실점, higher_is_better: false}
+  - {code: CS,      category: gk, name_ko: 무실점 경기}
+  - {code: SAV_PCT, category: gk, name_ko: 선방률, data_type: percent, formula: "SAV / (SAV + GA)",
+     description: 상대 유효 슈팅 대신 (선방 + 실점)으로 근사}
+  # ---------------- 순위 (팀) ----------------
+  - {code: std.G,   name_ko: 경기, higher_is_better: null}
+  - {code: std.W,   name_ko: 승}
+  - {code: std.D,   name_ko: 무, higher_is_better: null}
+  - {code: std.L,   name_ko: 패, higher_is_better: false}
+  - {code: std.PTS, name_ko: 승점, description: 감점 등을 반영한 소스 값을 그대로 사용}
+  - {code: std.GF,  name_ko: 득점}
+  - {code: std.GA,  name_ko: 실점, higher_is_better: false}
+  - {code: std.GD,  name_ko: 득실차, formula: "std.GF - std.GA"}
+
+splits:
+  - {code: by_half, name_ko: 전·후반, source: period, key: period.ordinal,
+     description: "1 = 전반, 2 = 후반, 3 이상 = 연장·승부차기"}
+
+qualification_rules:
+  - code: attacking_title
+    category: att
+    name_ko: 최소 출전 기준
+    rule: "G >= 0.5 * ctx.TEAM_GAMES"
+    provisional: true
+    description: 공식 기준이 없어 임시값 (팀 경기 수의 50% 이상 출전)
+  - code: goalkeeping_title
+    category: gk
+    name_ko: 골키퍼 최소 출전
+    rule: "SEC >= 0.5 * 5400 * ctx.TEAM_GAMES"
+    provisional: true
+    description: 임시값 (팀 전체 정규 시간의 50% 이상)

@@ -1,6 +1,7 @@
 # 1단계 (2/3) · 종목 독립적 데이터 모델 & ERD
 
-> 관련 문서: [01-architecture.md](./01-architecture.md), [03-assumptions-and-questions.md](./03-assumptions-and-questions.md)
+> 관련 문서: [01-architecture.md](./01-architecture.md), [03-assumptions-and-questions.md](./03-assumptions-and-questions.md),
+> [04-stage2-schema.md](./04-stage2-schema.md) (2단계 구현 및 설계 변경 사항)
 
 ---
 
@@ -134,7 +135,7 @@ basketball_player_match_stat(player_match_id, pts, reb, ast, ...)
 | `match` | 경기 | `stage_id`, `home_team_id`, `away_team_id`, `venue_id`, `scheduled_at`(timestamptz), `status`(scheduled/live/final/postponed/cancelled/suspended), `home_score`, `away_score`, `result_type`(regulation/OT/SO…), `attendance`, `duration_sec`, `game_number`(더블헤더), `attrs jsonb` |
 | `match_period` | 경기 구간 | `match_id`, `period_def_id`, `seq`(1..n), `home_score`, `away_score`, `duration_sec`, `stats jsonb`(구간별 팀 기록 필요 시) |
 | `match_lineup` | 선발/출전 명단 | `match_id`, `team_id`, `player_id`, `is_starter`, `batting_order`/`shirt_no`, `position_code` |
-| `player_match_stat` | 선수 경기 기록 | `match_id`, `player_id`, `team_id`, **`period_id`(NULL=경기 전체)**, 공통 컬럼(`position_code`, `is_starter`, `played_sec`), `stats`, `derived` |
+| `player_match_stat` | 선수 경기 기록 | `match_id`, `player_id`, `team_id`, **`period_id`(NULL=경기 전체)**, 공통 컬럼(`position_code`, `is_starter`), `stats`, `derived` (출전 시간은 종목 지표 `SEC`로 stats에 저장) |
 | `team_match_stat` | 팀 경기 기록 | `match_id`, `team_id`, `period_id`, `stats`, `derived` |
 | `player_season_stat` | 선수 시즌 누적 | `season_id`, `stage_id`, `player_id`, `team_id`(NULL=시즌 합산, 이적 시 팀별+합계), `origin`(collected/aggregated), `stats`, `derived` |
 | `team_season_stat` | 팀 시즌 누적 | 동일 구조 |
@@ -181,8 +182,10 @@ basketball_player_match_stat(player_match_id, pts, reb, ast, ...)
 | `injury_note` | `player_id`, `start_date`, `end_date`, `body_part`, `injury_type`, `severity`, `source_note`(출처), `expected_return_date`, `status`, `note` |
 | `tag` / `tag_assignment` | 자유 태그. 대상은 `player_id` / `team_id` / `match_id` 중 **정확히 하나**(CHECK 제약) — 다형 FK 대신 실제 FK 유지 |
 | `custom_metric` | 커스텀 지표 빌더 결과: `sport_id`, `code`(`cm.` 접두어 강제), `name`, `formula`(동일 DSL, 기존 지표만 참조), `levels`, `decimals`, `higher_is_better`, `qualification_rule` |
-| `custom_metric_value` | (선택) 계산 캐시, §2.4 |
-| `upload_template` | 종목별 CSV 템플릿 정의(컬럼 ↔ 대상/지표 코드). `stat_definition`에서 기본 템플릿 자동 생성 |
+| `custom_metric_value` | (선택) 계산 캐시, §2.4 — 7단계에서 필요 시 추가 |
+| `custom_field` | 분석가 정의 필드(`cf.` 접두어). 공개 데이터에 없는 수치를 `manual_stat`에 넣을 때 사용 |
+
+> CSV 업로드 템플릿은 별도 테이블 없이 `stat_definition` + `custom_field`로부터 런타임에 생성한다 (2단계 결정).
 | `manual_upload` | 업로드 이력: 파일명, 해시, 템플릿, 상태(validating/failed/applied/rolled_back), 검증 오류 목록 jsonb, 반영 건수 |
 | `manual_stat` | 업로드/직접 입력된 수치: `upload_id`, 대상(player/team/match), `period_id`, `stats jsonb`(허용 키: 해당 종목 `stat_definition` + `custom_field` 정의) — **core 기록과 별도 저장**, 화면에서 "분석가 입력" 배지로 구분 |
 | `saved_view` | 저장된 뷰: 화면 종류, 쿼리 상태 JSON(URL 파라미터), 공개 범위 |
@@ -376,7 +379,6 @@ erDiagram
         bigint period_id FK "NULL = 경기 전체"
         text position_code
         bool is_starter
-        int played_sec
         jsonb stats
         jsonb derived
         int source_id FK
@@ -548,8 +550,8 @@ erDiagram
     TEAM ||--o{ TAG_ASSIGNMENT : "tagged (one of)"
     MATCH ||--o{ TAG_ASSIGNMENT : "tagged (one of)"
     SPORT ||--o{ CUSTOM_METRIC : scopes
-    SPORT ||--o{ UPLOAD_TEMPLATE : scopes
-    UPLOAD_TEMPLATE ||--o{ MANUAL_UPLOAD : validates
+    SPORT ||--o{ MANUAL_UPLOAD : scopes
+    SPORT ||--o{ CUSTOM_FIELD : scopes
     MANUAL_UPLOAD ||--o{ MANUAL_STAT : produces
     APP_USER ||--o{ CHANGE_LOG : "acted by"
     APP_USER ||--o{ SAVED_VIEW : saves
@@ -620,10 +622,12 @@ erDiagram
         text_arr levels
         text visibility
     }
-    UPLOAD_TEMPLATE {
+    CUSTOM_FIELD {
         int id PK
         smallint sport_id FK
-        jsonb columns
+        text code "cf.*"
+        text data_type
+        text visibility
     }
     MANUAL_UPLOAD {
         bigint id PK
@@ -694,4 +698,4 @@ erDiagram
 | 종목 간 비교 | `match` 공통 컬럼(duration_sec, home/away score, attendance)만 사용 — 종목 무관 쿼리 |
 | 대용량 이벤트 | `event` 시즌(또는 연도) 범위 파티셔닝 |
 
-MV 갱신은 수집 완료 후 **해당 시즌만** `REFRESH MATERIALIZED VIEW CONCURRENTLY`(MV를 시즌 파티션처럼 분리하거나, 규모가 커지면 증분 집계 테이블로 교체).
+MV 갱신은 수집 완료 후 `REFRESH MATERIALIZED VIEW CONCURRENTLY`로 전체를 갱신한다(2단계 구현). 시즌 단위라 행 수가 작아 충분하며, 규모가 커지면 시즌별 증분 집계 테이블로 교체한다.
