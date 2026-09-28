@@ -9,6 +9,9 @@ dependencies = [
     "psycopg[binary]>=3.1",
     "pydantic>=2.6",
     "pyyaml>=6.0",
+    "requests>=2.31",
+    "croniter>=2.0",
+    "celery[redis]>=5.3",
 ]
 
 [project.optional-dependencies]
@@ -19,9 +22,12 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["app*", "config_sync*", "stats_engine*", "migrations*"]
+include = ["app*", "config_sync*", "stats_engine*", "migrations*", "collectors*", "worker*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
 markers = ["db: PostgreSQL 이 필요한 테스트 (TEST_DATABASE_URL 미설정 시 건너뜀)"]
+
+[tool.setuptools.package-data]
+migrations = ["sql/*.sql", "script.py.mako"]

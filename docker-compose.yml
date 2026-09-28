@@ -1,4 +1,4 @@
-# 2단계 구성: db + migrate(1회성). 이후 단계에서 backend / worker / scheduler / redis / frontend 추가.
+# 구성: db, migrate(1회성), redis, worker(수집), scheduler(beat). 이후 단계에서 backend(API) / frontend 추가.
 services:
   db:
     image: postgres:16
@@ -33,6 +33,48 @@ services:
       db:
         condition: service_healthy
     restart: "no"
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 20
+
+  # 수집 워커: app_ingest 권한으로 실행 (core/ingest 쓰기)
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment: &collector_env
+      DATABASE_URL: postgresql://app_ingest:${APP_INGEST_PASSWORD}@db:5432/sports
+      REDIS_URL: redis://redis:6379/0
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      TZ: Asia/Seoul
+    command: ["celery", "-A", "worker.celery_app", "worker", "-Q", "http", "-c", "2", "-l", "info"]
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  # 스케줄러: dispatch 태스크만 주기 실행. 리그별 수집 시각은 DB(ingest.collection_schedule)
+  scheduler:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment: *collector_env
+    command: ["celery", "-A", "worker.celery_app", "beat", "-l", "info", "-s", "/tmp/celerybeat-schedule"]
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   pgdata:

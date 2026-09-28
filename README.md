@@ -10,8 +10,8 @@
 | 단계 | 내용 | 상태 |
 |---|---|---|
 | 1 | 아키텍처 · 종목 독립적 데이터 모델 · ERD | 완료 |
-| 2 | DB 스키마 SQL · 마이그레이션 · 종목 설정 시드 | 검토 대기 |
-| 3 | 수집 플러그인 인터페이스 + 첫 수집기 (KBO) | - |
+| 2 | DB 스키마 SQL · 마이그레이션 · 종목 설정 시드 | 완료 |
+| 3 | 수집 플러그인 인터페이스 + 첫 수집기 (KBO) | 공통부 완료 · KBO 수집기 보류 (소스 접근 필요) |
 | 4 | 나머지 종목 수집기 | - |
 | 5 | 백엔드 API (FastAPI, OpenAPI) | - |
 | 6 | 프론트엔드 주요 화면 (Next.js) | - |
@@ -24,13 +24,16 @@
 - [02. 데이터 모델 · 저장 방식 비교 · ERD](docs/design/02-data-model.md)
 - [03. 가정 및 확인 필요 사항](docs/design/03-assumptions-and-questions.md)
 - [04. 2단계: DB 스키마 · 마이그레이션 · 설정 시드](docs/design/04-stage2-schema.md)
+- [05. 3단계: 수집 플러그인 · 파이프라인 (플러그인 작성 가이드 포함)](docs/design/05-stage3-collectors.md)
 
 ## 저장소 구조
 
 ```
 backend/
   migrations/      Alembic (본문은 migrations/sql/*.sql 순수 SQL)
-  stats_engine/    지표 수식 DSL
+  collectors/      수집 플러그인 인터페이스·공통 파이프라인 (core/), 종목·리그별 플러그인 (plugins/)
+  worker/          Celery (dispatch / collect)
+  stats_engine/    지표 수식 DSL, 파생 지표·시즌 집계·리그 상수 계산
   config_sync/     설정 YAML 로드·검증·DB 동기화
   app/             CLI (이후 FastAPI)
   tests/
@@ -48,6 +51,7 @@ docker-compose.yml
 cp .env.example .env              # 비밀번호 변경
 docker compose up -d db
 docker compose run --rm migrate   # 스키마 마이그레이션 + 종목/리그 설정 동기화
+docker compose up -d redis worker scheduler   # 수집 워커 + 스케줄러
 ```
 
 로컬 개발과 테스트 실행 방법은 [04 문서](docs/design/04-stage2-schema.md#2-실행-방법)를 참고하세요.
