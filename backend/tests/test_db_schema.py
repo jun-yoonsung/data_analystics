@@ -90,8 +90,8 @@ def test_seed_counts(conn):
     assert set(rows) == {"baseball", "basketball", "volleyball", "football"}
     assert all(n > 30 for n in rows.values())
     assert conn.execute(text("SELECT count(*) FROM core.league")).scalar_one() == 5
-    assert conn.execute(text(
-        "SELECT count(*) FROM ingest.data_source WHERE collection_allowed")).scalar_one() == 0
+    assert set(conn.execute(text(
+        "SELECT code FROM ingest.data_source WHERE collection_allowed")).scalars()) == {"kbo_gh_schedule", "kbo_gh_stats"}
 
 
 def test_player_match_stat_natural_key_treats_null_period_as_equal(conn):

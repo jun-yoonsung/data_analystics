@@ -1,6 +1,7 @@
 # KBO 리그
-#  수집 시각(가정): 평일 18:30, 주말 14:00~17:00 경기 → 대부분 22:30 이전 종료.
-#  3단계에서 소스의 갱신 시점을 확인한 뒤 조정한다. cron 은 timezone(Asia/Seoul) 기준.
+#  소스는 GitHub 공개 저장소의 매일 자동 수집 데이터다 (config/sources/kbo_gh_*.yaml).
+#  갱신 시각: 일정·결과 23:55 KST, 시즌 기록·순위 00:30 KST 예약(실제 반영 04~05시경) → 그 뒤에 받는다.
+#  cron 은 timezone(Asia/Seoul) 기준.
 league:
   code: KBO
   sport: baseball
@@ -10,16 +11,12 @@ league:
   gender: men
   tier: 1
   timezone: Asia/Seoul
-  collector_key: kbo_official
+  collector_key: kbo_community
 
 schedules:
-  # 경기 단위 데이터는 네이버 스포츠 경기 API, 순위·팀 시즌 기록은 KBO 공식 사이트 (수집 플러그인의 source_code_for)
-  - {job_type: schedule,     source: naver_sports, cron: "10 6 * * *",  offseason_policy: weekly,
+  - {job_type: schedule,     source: kbo_gh_schedule, cron: "10 6 * * *", offseason_policy: weekly,
      params: {days_back: 3, days_ahead: 14}}
-  - {job_type: results,      source: naver_sports, cron: "50 23 * * *"}
-  - {job_type: boxscore,     source: naver_sports, cron: "55 23 * * *",
-     params: {recheck_days: 2, note: "다음 날 오전 정정 반영을 위해 최근 2일 재수집. results 작업 뒤에 실행"}}
-  - {job_type: season_stats, source: kbo_official, cron: "40 0 * * *",
-     params: {note: "팀 시즌 기록만. 선수 시즌 기록은 박스스코어 집계"}}
-  - {job_type: standings,    source: kbo_official, cron: "45 0 * * *"}
-  # events(문자중계)·roster(1군 등록 현황)는 소스 구조가 확인되지 않아 수집기가 아직 지원하지 않는다
+  - {job_type: results,      source: kbo_gh_schedule, cron: "20 6 * * *", params: {recheck_days: 3}}
+  - {job_type: season_stats, source: kbo_gh_stats,    cron: "40 6 * * *"}
+  - {job_type: standings,    source: kbo_gh_stats,    cron: "45 6 * * *"}
+  # boxscore(경기별 선수 기록)·events(문자중계)·roster 는 온전한 공개 데이터가 없어 지원하지 않는다

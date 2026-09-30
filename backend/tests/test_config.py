@@ -32,8 +32,10 @@ def test_repository_config_is_valid():
     validate_bundle(bundle)
     assert set(bundle.sports) == EXPECTED_SPORTS
     assert set(bundle.leagues) == EXPECTED_LEAGUES
-    # 모든 리그의 수집 소스는 약관 확인 전이므로 수집 비활성 상태여야 한다
-    assert all(not s.collection_allowed for s in bundle.sources.values())
+    # 수집 허용은 약관·robots.txt 를 확인해 기록한 소스만 (현재 KBO 의 GitHub 공개 데이터 두 곳)
+    allowed = {s.code for s in bundle.sources.values() if s.collection_allowed}
+    assert allowed == {"kbo_gh_schedule", "kbo_gh_stats"}
+    assert all(bundle.sources[c].terms_note and "확인" in bundle.sources[c].terms_note for c in allowed)
 
 
 def test_required_metrics_are_defined():

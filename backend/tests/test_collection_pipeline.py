@@ -226,8 +226,8 @@ def test_source_not_allowed_is_skipped_without_requests(engine):
 
 
 def test_missing_plugin_is_skipped(engine):
-    result = Env(engine).run("schedule", league="KBO")   # KBO 수집기는 아직 등록 전
-    assert result.status == "skipped" and "kbo_official" in result.error
+    result = Env(engine).run("schedule", league="KBL")   # KBL 수집기는 아직 등록 전
+    assert result.status == "skipped" and "kbl_official" in result.error
 
 
 def test_concurrent_run_is_skipped(engine):

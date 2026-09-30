@@ -1,21 +1,15 @@
-# KBO 플러그인 테스트 픽스처 — 합성 데이터 (실제 응답 아님)
+# KBO 플러그인 테스트 픽스처 — 실제 파일
 
-이 작업 환경은 `www.koreabaseball.com`, `api-gw.sports.naver.com` 접속이 막혀 있어 실제 응답을 받을 수 없었다.
-여기 있는 파일은 이전 프로젝트 [kbo-dashboard](https://github.com/jun-yoonsung/kbo-dashboard) 의
-`kbo_scraper.py` 가 **실제로 읽던 필드·선택자만** 사용해 손으로 만든 합성 응답이다.
+GitHub 공개 저장소에서 2026-09-30 에 받은 **실제 파일**이다 (가공하지 않음).
 
-- 선수 이름(`가상타자1` 등)과 기록 값은 모두 가상이다. 팀 이름만 실제 구단 표기를 쓴다.
-- 대시보드가 쓰지 않던 필드(선수 코드, 이닝별 점수, 포스트시즌 roundCode 등)는 넣지 않았다.
-- 소스 접속이 가능해지면 실제 응답으로 교체하거나 추가하고, 달라진 점이 있으면 파서와
-  `parser_version` 을 고친 뒤 `python -m app.cli reprocess` 로 재처리한다.
-
-| 파일 | 소스 | 대응 URL |
+| 파일 | 원본 | 확인하는 내용 |
 |---|---|---|
-| `naver_schedule.json` | naver_sports | `/schedule/games?fields=basic,schedule,baseball&fromDate=2026-09-26&toDate=2026-09-28&categoryId=kbo` |
-| `naver_record_20260926LGOB02026.json` | naver_sports | `/schedule/games/20260926LGOB02026/record` |
-| `kbo_teamrank.html` | kbo_official | `/record/teamrank/teamrank.aspx` |
-| `kbo_team_hitter_basic1.html`, `…basic2.html` | kbo_official | `/Record/Team/Hitter/Basic1.aspx`, `Basic2.aspx` |
-| `kbo_team_pitcher_basic1.html`, `…basic2.html` | kbo_official | `/Record/Team/Pitcher/Basic1.aspx`, `Basic2.aspx` |
+| `gh_schedule_2026_09.json` | [comographer/kbo-crawler](https://github.com/comographer/kbo-crawler) `data/raw/2026/schedule_2026_09.json` (커밋 db9e975) | 종료·예정·우천취소, 무승부, 중계 여러 개 |
+| `gh_schedule_2026_03.json` | 같은 저장소 `data/raw/2026/schedule_2026_03.json` | 개막월, 무승부 |
+| `gh_schedule_2023_10.json` | 같은 저장소 `data/raw/2023/schedule_2023_10.json` | 더블헤더(gameId 끝자리 1·2) |
+| `gh_postseason_2025_10.json` | 같은 저장소 `data/raw/2025/postseason/postseason_2025_10.json` | 포스트시즌 |
+| `gh_postseason_2025_12_empty.json` | 같은 저장소 `data/raw/2025/postseason/postseason_2025_12.json` | 경기 없는 달(빈 rows) |
+| `gh_stats_meta.json`, `gh_stats_hitters.json`, `gh_stats_pitchers.json`, `gh_stats_players.json`, `gh_stats_standings.json` | [PsyproLEE/KBO_statics](https://github.com/PsyproLEE/KBO_statics) `web/public/data/*.json` (커밋 a23afb4) | 2026 시즌 선수 기록·프로필·순위 |
+| `gh_stats_season_1982.json` | 같은 저장소 `web/public/data/season/1982.json` | 지난 시즌, 옛 구단명, 당시 미집계 항목(0 표시) |
 
-KBO 팀 기록표의 Basic1/Basic2 머리글 구성은 대시보드 코드에 명시되어 있지 않아, 대시보드가 사용하던 지표 약어로
-구성했다. 파서는 머리글 텍스트로 열을 찾으므로(순서 무관) 실제 구성이 달라도 동작하며, 모르는 머리글은 경고로 남긴다.
+두 저장소 모두 라이선스 파일이 없다. 테스트 목적으로만 저장소에 포함한다.

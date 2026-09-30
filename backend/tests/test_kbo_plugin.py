@@ -1,47 +1,35 @@
 """KBO 수집 플러그인 테스트.
 
-- 정규화 단위 테스트: 네트워크·DB 없이 tests/fixtures/kbo/ 의 합성 픽스처로 파서를 검증한다.
-- 통합 테스트(db): 가짜 HTTP 세션으로 픽스처를 돌려주고 실제 runner·writer·deriver 로 저장까지 확인한다.
-픽스처는 실제 응답이 아니라 이전 kbo-dashboard 파서가 읽던 필드로 만든 합성 데이터다 (fixtures/kbo/README.md).
+픽스처(tests/fixtures/kbo/)는 GitHub 공개 저장소에서 받은 **실제 파일**이다 (README 참고).
+- 정규화 단위 테스트: 네트워크·DB 없이 파서를 검증한다.
+- 통합 테스트(db): 가짜 HTTP 세션이 픽스처를 돌려주고 실제 runner·writer·deriver 로 저장까지 확인한다.
 """
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import create_engine, text
 
-from collectors.core.http import PoliteHttpClient, SourcePolicy
-from collectors.core.interface import RawDocument, RunContext, SeasonRef
+from collectors.core.http import FetchError, PoliteHttpClient, SourcePolicy
+from collectors.core.interface import MatchTarget, NotSupported, RawDocument, RunContext, SeasonRef
 from collectors.core.registry import get_plugin
 from collectors.core.runner import CollectionRunner, JobRequest
-from collectors.plugins.baseball_kbo import kbo_html, naver
-from collectors.plugins.baseball_kbo.common import kbo_innings_to_outs, naver_innings_to_outs, team_ref
+from collectors.plugins.baseball_kbo import records, schedule
+from collectors.plugins.baseball_kbo.common import kbo_innings_to_outs, team_ref
 from collectors.plugins.baseball_kbo.plugin import KboPlugin
 from config_sync.loader import DEFAULT_CONFIG_DIR, load_config
 from tests.fake_plugin import FakeSession
 
 FIXTURES = Path(__file__).parent / "fixtures" / "kbo"
 KST = ZoneInfo("Asia/Seoul")
-GAME = "20260926LGOB02026"
 
 
-def fixture_text(name: str) -> str:
-    return (FIXTURES / name).read_text(encoding="utf-8")
-
-
-def fixture_json(name: str) -> dict:
-    return json.loads(fixture_text(name))
-
-
-def team_pages() -> list[tuple[str, str]]:
-    return [("batting", fixture_text("kbo_team_hitter_basic1.html")),
-            ("batting", fixture_text("kbo_team_hitter_basic2.html")),
-            ("pitching", fixture_text("kbo_team_pitcher_basic1.html")),
-            ("pitching", fixture_text("kbo_team_pitcher_basic2.html"))]
+def fx(name: str):
+    return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
 
 
 @pytest.fixture(scope="module")
@@ -51,256 +39,254 @@ def raw_stat_codes() -> set[str]:
     return {s.code for s in sport.stats if not s.is_derived}
 
 
-def all_stat_keys(bundle) -> set[str]:
+def stat_keys(bundle) -> set[str]:
     keys: set[str] = set()
-    for rows in (bundle.player_match_stats, bundle.team_match_stats, bundle.player_season_stats,
-                 bundle.team_season_stats, bundle.standings):
+    for rows in (bundle.player_season_stats, bundle.team_season_stats, bundle.standings):
         for r in rows:
             keys |= set(r.stats)
     return keys
 
 
 # ---------------------------------------------------------------------------
-# 표기 변환
+# 공용
 # ---------------------------------------------------------------------------
 @pytest.mark.parametrize("value,outs", [
-    ("6 1/3", 19), ("6 2/3", 20), ("6", 18), ("0", 0), ("2/3", 2), ("1250 1/3", 3751),
+    ("6 1/3", 19), ("6 2/3", 20), ("6", 18), ("0", 0), ("2/3", 2), ("224 2/3", 674),
     ("-", None), ("", None), (None, None), ("6.1", None), ("6 1/2", None),
 ])
 def test_kbo_innings_to_outs(value, outs):
     assert kbo_innings_to_outs(value) == outs
 
 
-@pytest.mark.parametrize("value,outs", [
-    ("6 ⅓", 19), ("6 ⅔", 20), ("0 ⅓", 1), ("⅔", 2), ("5", 15), (5, 15), ("-", None), ("x", None), (None, None),
-])
-def test_naver_innings_to_outs(value, outs):
-    assert naver_innings_to_outs(value) == outs
-
-
-def test_team_ref_unifies_names_and_warns_unknown():
+def test_team_ref_franchise_aliases():
     warnings: list[str] = []
-    assert team_ref("SSG", warnings)[0] == "SK"
-    assert team_ref("kia", warnings)[1].name_ko == "KIA 타이거즈"
-    assert team_ref("두산 베어스", warnings)[0] == "OB"
+    ids = [team_ref(n, warnings)[0] for n in
+           ("SSG", "SK", "kia", "해태", "MBC", "두산 베어스", "OB", "빙그레", "넥센", "우리", "삼미", "태평양", "쌍방울")]
+    assert ids == ["SK", "SK", "HT", "HT", "LG", "OB", "OB", "HH", "WO", "WO", "HD", "HD", "SB"]
     assert not warnings
+    _, lg = team_ref("MBC", warnings)
+    assert lg.name_ko == "LG 트윈스" and lg.attrs == {"former_names": ["MBC"]}
+    assert team_ref("현대", warnings)[1].attrs["defunct"] is True
     ext, team = team_ref("신생구단", warnings)
-    assert ext == "name:신생구단" and team.name_ko == "신생구단" and len(warnings) == 1
+    team_ref("신생구단", warnings)
+    assert ext == "name:신생구단" and team.name_ko == "신생구단" and len(warnings) == 1   # 같은 경고는 한 번만
 
 
 # ---------------------------------------------------------------------------
-# 네이버 일정
+# 일정·결과 (comographer/kbo-crawler)
 # ---------------------------------------------------------------------------
-def test_parse_schedule():
-    bundle = naver.parse_schedule(fixture_json("naver_schedule.json"))
+def test_parse_schedule_regular_month():
+    bundle = schedule.parse_schedule(fx("gh_schedule_2026_09.json"), 2026, "regular")
     by_id = {m.external_id: m for m in bundle.matches}
-    # 올스타전(kbo_as)은 조용히 제외, 모르는 roundCode 는 경고 후 제외
-    assert set(by_id) == {GAME, "20260926HTSS02026", "20260927SKHH12026", "20260927SKHH22026",
-                          "20260928WONC02026"}
-    assert any("kbo_unknown" in w for w in bundle.warnings)
-    assert not any("EASTWEST" in w for w in bundle.warnings)
+    assert len(bundle.matches) == 108 and not bundle.warnings
+    assert sum(m.status == "final" for m in bundle.matches) == 99
+    assert sum(m.status == "postponed" for m in bundle.matches) == 4
+    assert sum(m.status == "scheduled" for m in bundle.matches) == 5
 
-    g = by_id[GAME]
-    assert (g.home_team_external_id, g.away_team_external_id) == ("OB", "LG")
-    assert (g.status, g.home_score, g.away_score, g.venue_external_id) == ("final", 3, 5, "잠실")
-    assert g.scheduled_at == datetime(2026, 9, 26, 17, 0, tzinfo=KST)
+    g = by_id["20260901LGOB0"]                  # LG 3 : 1 두산 (잠실, 원정 LG)
+    assert (g.away_team_external_id, g.home_team_external_id) == ("LG", "OB")
+    assert (g.status, g.away_score, g.home_score, g.venue_external_id) == ("final", 3, 1, "잠실")
+    assert g.scheduled_at == datetime(2026, 9, 1, 18, 30, tzinfo=KST)
     assert (g.season_label, g.stage_code, g.game_number) == ("2026", "REG", 1)
-    assert g.attrs["win_pitcher"] == "가상투수1" and g.attrs["status_info"] == "경기종료"
-    assert "win_pitcher" not in by_id["20260926HTSS02026"].attrs      # 빈 문자열은 넣지 않는다
+    assert g.attrs == {"broadcast": ["SPO-T"]}
 
-    # 더블헤더: 같은 날 같은 대진은 시작 시각 순으로 1, 2차전
-    assert by_id["20260927SKHH12026"].game_number == 1
-    assert by_id["20260927SKHH22026"].game_number == 2
-    # 취소·예정 경기는 점수를 넣지 않는다
-    assert by_id["20260927SKHH22026"].status == "cancelled" and by_id["20260927SKHH22026"].home_score is None
-    assert by_id["20260928WONC02026"].status == "scheduled" and by_id["20260928WONC02026"].away_score is None
+    rain = by_id["20260903HTNC0"]               # 링크 없는 취소 경기 → KBO 형식 ID 생성
+    assert rain.status == "postponed" and rain.home_score is None
+    assert rain.attrs["cancel_reason"] == "우천취소"
+    assert by_id["20260925LTOB0"].attrs["broadcast"] == ["SPO-T", "KN-T"]
 
-    assert {t.external_id for t in bundle.teams} == {"OB", "LG", "SS", "HT", "HH", "SK", "NC", "WO"}
-    assert {v.name_ko for v in bundle.venues} == {"잠실", "대구", "대전", "창원"}
+    tie = by_id["20260916KTHH0"]
+    assert tie.status == "final" and tie.home_score == tie.away_score
+
+    assert {t.external_id for t in bundle.teams} == {"LG", "KT", "SK", "NC", "OB", "HT", "LT", "SS", "HH", "WO"}
     assert [(s.code, s.stage_type) for s in bundle.stages] == [("REG", "regular")]
-    assert [s.label for s in bundle.seasons] == ["2026"]
 
 
-def test_parse_schedule_empty_and_unknown_status():
-    assert naver.parse_schedule({"result": {"games": []}}).is_empty()
-    bundle = naver.parse_schedule({"result": {"games": [
-        {"gameId": "X1", "roundCode": "kbo_r", "gameDateTime": "2026-09-26T17:00:00", "homeTeamName": "LG",
-         "awayTeamName": "KT", "statusCode": "WEIRD"}]}})
-    assert not bundle.matches and any("WEIRD" in w for w in bundle.warnings)
+def test_parse_schedule_doubleheader_and_tie():
+    dh = {m.external_id: m for m in schedule.parse_schedule(fx("gh_schedule_2023_10.json"), 2023, "regular").matches}
+    assert dh["20231002SSLT1"].game_number == 1 and dh["20231002SSLT2"].game_number == 2
+    assert dh["20231002SSLT2"].scheduled_at.time() == time(17, 0)
+    march = {m.external_id: m for m in schedule.parse_schedule(fx("gh_schedule_2026_03.json"), 2026, "regular").matches}
+    assert march["20260331OBSS0"].home_score == march["20260331OBSS0"].away_score == 5
 
 
-# ---------------------------------------------------------------------------
-# 네이버 박스스코어
-# ---------------------------------------------------------------------------
-def test_parse_record(raw_stat_codes):
-    bundle = naver.parse_record(fixture_json(f"naver_record_{GAME}.json"), GAME)
-    stats = {s.player_external_id: s for s in bundle.player_match_stats}
-    assert set(stats) == {"LG:가상타자1", "LG:가상타자2", "LG:가상투수1", "LG:가상투수2",
-                          "OB:가상타자3", "OB:가상투수3", "OB:가상투수4"}
-    assert all(s.match_external_id == GAME for s in stats.values())
-    assert stats["OB:가상타자3"].team_external_id == "OB"
-
-    b1 = stats["LG:가상타자1"].stats
-    assert b1 == {"bat.G": 1, "bat.AB": 4, "bat.H": 2, "bat.HR": 1, "bat.RBI": 3, "bat.R": 2, "bat.SB": 0,
-                  "bat.BB": 1, "bat.SO": 1, "bat.DBL": 1, "bat.TPL": 0, "bat.HBP": 0, "bat.SF": 0, "bat.SH": 0,
-                  "bat.PA": 5}
-    b2 = stats["LG:가상타자2"].stats
-    assert (b2["bat.HBP"], b2["bat.TPL"], b2["bat.SF"], b2["bat.DBL"], b2["bat.PA"]) == (1, 1, 1, 0, 5)
-    assert stats["OB:가상타자3"].stats["bat.SH"] == 1 and stats["OB:가상타자3"].stats["bat.PA"] == 5
-
-    p1 = stats["LG:가상투수1"].stats
-    # 타자 명단에도 있는 투수는 한 행에 타격·투구 지표가 함께 들어간다
-    assert p1["bat.G"] == 1 and p1["bat.AB"] == 0
-    assert {k: v for k, v in p1.items() if k.startswith("pit.")} == {
-        "pit.G": 1, "pit.OUTS": 19, "pit.ER": 2, "pit.H": 5, "pit.R": 3, "pit.BB": 2, "pit.SO": 7, "pit.HR": 1,
-        "pit.TBF": 26, "pit.NP": 98}
-    # 시즌 누적 필드(gameCount, w, l, era)는 경기 기록에 섞지 않는다
-    assert "pit.W" not in p1 and "pit.L" not in p1
-    assert stats["LG:가상투수2"].stats["pit.OUTS"] == 8
-    assert stats["OB:가상투수4"].stats["pit.OUTS"] == 1
-
-    assert all_stat_keys(bundle) <= raw_stat_codes
-    assert {p.name_ko for p in bundle.players} >= {"가상타자1", "가상투수4"}
-    assert not bundle.warnings
+def test_parse_schedule_postseason_and_empty():
+    bundle = schedule.parse_schedule(fx("gh_postseason_2025_10.json"), 2025, "postseason")
+    assert len(bundle.matches) == 16 and all(m.stage_code == "POST" for m in bundle.matches)
+    assert [(s.code, s.stage_type) for s in bundle.stages] == [("POST", "postseason")]
+    assert {m.external_id for m in bundle.matches} >= {"20251006NCSS0"}
+    assert schedule.parse_schedule(fx("gh_postseason_2025_12_empty.json"), 2025, "postseason").is_empty()
 
 
-def test_parse_record_requires_team_names():
+def test_parse_schedule_rejects_changed_structure():
     with pytest.raises(ValueError):
-        naver.parse_record({"result": {"recordData": {}}}, GAME)
-
-
-def test_inning_result_counts():
-    counts = naver.inning_result_counts({"inn1": "좌2", "inn2": "중3", "inn3": "사구", "inn4": "우희비",
-                                         "inn5": "투희번", "inn6": "좌홈", "inn7": "", "name": "좌2"})
-    assert counts == {"bat.DBL": 1, "bat.TPL": 1, "bat.HBP": 1, "bat.SF": 1, "bat.SH": 1}
+        schedule.parse_schedule({"data": []}, 2026, "regular")
+    bad = {"rows": [{"row": [{"Class": "day", "Text": "09.01(화)"}, {"Text": "<b>18:30</b>"},
+                             {"Text": "<span>LG</span>"}, *[{"Text": ""}] * 6]}]}
+    bundle = schedule.parse_schedule(bad, 2026, "regular")
+    assert not bundle.matches and "대진 해석 불가" in bundle.warnings[0]
 
 
 # ---------------------------------------------------------------------------
-# KBO 공식 페이지
+# 시즌 기록·순위 (PsyproLEE/KBO_statics)
 # ---------------------------------------------------------------------------
+def test_parse_season_stats_current(raw_stat_codes):
+    bundle = records.parse_season_stats("2026", fx("gh_stats_hitters.json"), fx("gh_stats_pitchers.json"),
+                                        fx("gh_stats_players.json"))
+    assert not bundle.warnings
+    players = {p.external_id: p for p in bundle.players}
+    stats = {(s.player_external_id, s.team_external_id): s.stats for s in bundle.player_season_stats}
+    assert len(players) == 587 and len(stats) == 587          # 타자 360 + 투수 293 - 겸업 66
+
+    koo = players["62404"]
+    assert (koo.name_ko, koo.birth_date, koo.height_cm, koo.weight_kg) == ("구자욱", date(1993, 2, 12), 189.0, 75.0)
+    assert koo.attrs["position"] == "외야수" and koo.attrs["throws_bats"] == "우투좌타"
+    assert stats[("62404", "SS")] == {
+        "bat.G": 113, "bat.PA": 496, "bat.AB": 419, "bat.R": 88, "bat.H": 155, "bat.DBL": 30, "bat.TPL": 6,
+        "bat.HR": 15, "bat.RBI": 102, "bat.SH": 1, "bat.SF": 5, "bat.BB": 66, "bat.IBB": 3, "bat.HBP": 5,
+        "bat.SO": 71, "bat.GDP": 4}
+
+    pitcher = next(r for r in fx("gh_stats_pitchers.json") if r["IP"] not in ("0", "-"))
+    team = team_ref(pitcher["팀명"], [])[0]
+    assert stats[(pitcher["playerId"], team)]["pit.OUTS"] == kbo_innings_to_outs(pitcher["IP"])
+    # 타자·투수 명단 모두에 있는 선수는 한 행에 bat.*, pit.* 가 함께 있다
+    both = {r["playerId"] for r in fx("gh_stats_hitters.json")} & {r["playerId"] for r in fx("gh_stats_pitchers.json")}
+    pid = sorted(both)[0]
+    row = next(v for (p, _), v in stats.items() if p == pid)
+    assert any(k.startswith("bat.") for k in row) and any(k.startswith("pit.") for k in row)
+
+    teams = {t.team_external_id: t.stats for t in bundle.team_season_stats}
+    assert len(teams) == 10
+    assert teams["SS"]["bat.H"] == sum(v.get("bat.H", 0) for (_, t), v in stats.items() if t == "SS")
+    assert "bat.G" not in teams["SS"] and "pit.G" not in teams["SS"]      # 경기 수는 합산하지 않는다
+    assert stat_keys(bundle) <= raw_stat_codes
+
+
+def test_parse_season_stats_history_drops_unrecorded(raw_stat_codes):
+    data = fx("gh_stats_season_1982.json")
+    bundle = records.parse_season_stats("1982", data["hitters"], data["pitchers"])
+    teams = {t.external_id: t for t in bundle.teams}
+    # 1982년 MBC·해태·삼미는 계승 구단으로 연결
+    assert set(teams) == {"OB", "SS", "LG", "HT", "LT", "HD"}
+    assert not any("알 수 없는 팀" in w for w in bundle.warnings)
+    # 당시 집계하지 않아 전부 0 인 투구 수·QS·홀드 등은 빼고 경고로 남긴다
+    dropped = next(w for w in bundle.warnings if "미집계" in w)
+    for code in ("pit.NP", "pit.QS", "pit.HLD"):
+        assert code in dropped
+    park = next(s.stats for s in bundle.player_season_stats if s.player_external_id == "82234")   # 박철순
+    assert (park["pit.W"], park["pit.L"], park["pit.OUTS"]) == (24, 4, 674)
+    assert "pit.NP" not in park and "pit.QS" not in park
+    assert all(p.birth_date is None for p in bundle.players)          # 지난 시즌 파일에는 프로필이 없다
+    assert stat_keys(bundle) <= raw_stat_codes
+
+
 def test_parse_standings(raw_stat_codes):
-    bundle = kbo_html.parse_standings(fixture_text("kbo_teamrank.html"), "2026", date(2026, 9, 29))
-    rows = {s.team_external_id: s for s in bundle.standings}
-    assert [(s.rank, s.team_external_id) for s in bundle.standings] == [(1, "LG"), (2, "HT"), (3, "OB")]
-    assert rows["LG"].stats == {"std.G": 140, "std.W": 84, "std.L": 53, "std.D": 3, "std.GB": 0.0}
-    assert rows["OB"].stats["std.GB"] == 9.5
-    assert all(s.as_of_date == date(2026, 9, 29) and s.stage_code == "REG" for s in bundle.standings)
-    assert all_stat_keys(bundle) <= raw_stat_codes
-    assert {t.name_ko for t in bundle.teams} == {"LG 트윈스", "KIA 타이거즈", "두산 베어스"}
-    assert not bundle.warnings
-
-
-def test_parse_standings_season_from_page():
-    bundle = kbo_html.parse_standings(fixture_text("kbo_teamrank.html"), "2027", date(2027, 3, 1))
-    assert bundle.standings[0].season_label == "2026"
-    assert any("페이지 시즌 2026" in w for w in bundle.warnings)
-
-
-def test_parse_standings_rejects_changed_layout():
+    as_of = records.parse_updated_date(fx("gh_stats_meta.json"))
+    assert as_of == date(2026, 9, 30)
+    bundle = records.parse_standings("2026", fx("gh_stats_standings.json"), as_of)
+    rows = [(s.rank, s.team_external_id) for s in bundle.standings]
+    assert len(rows) == 10 and rows[0] == (1, "KT")
+    kt = bundle.standings[0].stats
+    assert kt == {"std.G": 135, "std.W": 82, "std.L": 49, "std.D": 4, "std.GB": 0.0}
+    assert stat_keys(bundle) <= raw_stat_codes and not bundle.warnings
     with pytest.raises(ValueError):
-        kbo_html.parse_standings("<html><body><table class='other'></table></body></html>", "2026", date(2026, 9, 29))
-
-
-def test_parse_team_stats_merges_pages(raw_stat_codes):
-    bundle = kbo_html.parse_team_stats(team_pages(), "2026")
-    rows = {r.team_external_id: r.stats for r in bundle.team_season_stats}
-    assert set(rows) == {"LG", "HT", "OB"}
-    lg = rows["LG"]
-    # 타격 두 페이지 + 투구 두 페이지가 한 행으로 합쳐진다
-    assert (lg["bat.PA"], lg["bat.DBL"], lg["bat.SH"], lg["bat.GDP"], lg["bat.IBB"]) == (5412, 241, 41, 101, 21)
-    assert (lg["pit.OUTS"], lg["pit.W"], lg["pit.HLD"], lg["pit.QS"], lg["pit.NP"], lg["pit.BK"]) == \
-        (3751, 84, 88, 68, 20512, 3)
-    assert rows["HT"]["pit.OUTS"] == 1241 * 3 + 2 and rows["OB"]["pit.OUTS"] == 1249 * 3
-    # 투구 기록표의 피2루타(2B) 가 타격 2루타(bat.DBL) 로 섞이지 않는다
-    assert lg["bat.DBL"] == 241
-    # 파생 지표(AVG, ERA, WHIP, OPS ...)는 저장하지 않는다
-    assert all_stat_keys(bundle) <= raw_stat_codes
-    assert not bundle.warnings
-
-
-def test_parse_team_stats_warns_unknown_header():
-    html = fixture_text("kbo_team_hitter_basic1.html").replace("<th>SF</th>", "<th>NEWSTAT</th>")
-    bundle = kbo_html.parse_team_stats([("batting", html)], "2026")
-    assert any("NEWSTAT" in w for w in bundle.warnings)
-    assert "bat.SF" not in bundle.team_season_stats[0].stats
+        records.parse_standings("2026", [], as_of)
 
 
 # ---------------------------------------------------------------------------
 # 플러그인 (가짜 HTTP, DB 없음)
 # ---------------------------------------------------------------------------
-def fixture_routes() -> dict:
-    return {
-        "/schedule/games": fixture_text("naver_schedule.json"),
-        f"/schedule/games/{GAME}/record": fixture_text(f"naver_record_{GAME}.json"),
-        "/record/teamrank/teamrank.aspx": fixture_text("kbo_teamrank.html"),
-        "/Record/Team/Hitter/Basic1.aspx": fixture_text("kbo_team_hitter_basic1.html"),
-        "/Record/Team/Hitter/Basic2.aspx": fixture_text("kbo_team_hitter_basic2.html"),
-        "/Record/Team/Pitcher/Basic1.aspx": fixture_text("kbo_team_pitcher_basic1.html"),
-        "/Record/Team/Pitcher/Basic2.aspx": fixture_text("kbo_team_pitcher_basic2.html"),
-    }
+SCH = "/comographer/kbo-crawler/main/data/raw"
+STA = "/PsyproLEE/KBO_statics/main/web/public/data"
+
+
+def raw(name: str) -> str:
+    """픽스처 원문 (FakeSession 은 리스트 값을 '차례로 돌려줄 응답 목록'으로 보므로 문자열로 넘긴다)."""
+    return (FIXTURES / name).read_text(encoding="utf-8")
+
+
+def routes() -> dict:
+    r = {f"{SCH}/2026/schedule_2026_09.json": raw("gh_schedule_2026_09.json"),
+         f"{SCH}/2026/postseason/postseason_2026_09.json": raw("gh_postseason_2025_12_empty.json"),
+         f"{SCH}/2025/postseason/postseason_2025_10.json": raw("gh_postseason_2025_10.json"),
+         f"{SCH}/2025/schedule_2025_10.json": raw("gh_postseason_2025_12_empty.json"),
+         f"{STA}/season/1982.json": raw("gh_stats_season_1982.json")}
+    for n in ("meta", "hitters", "pitchers", "players", "standings"):
+        r[f"{STA}/{n}.json"] = raw(f"gh_stats_{n}.json")
+    return r
 
 
 def make_ctx(job: str, session: FakeSession) -> RunContext:
     http = PoliteHttpClient(SourcePolicy(code="x", base_url="https://x", collection_allowed=True),
                             session=session, sleep=lambda s: None)
     return RunContext(league_code="KBO", sport_code="baseball", timezone="Asia/Seoul", job_type=job,
-                      today=date(2026, 9, 29), http=http)
+                      today=date(2026, 9, 30), http=http)
 
 
 def test_plugin_registered_with_job_sources():
-    plugin = get_plugin("kbo_official")
-    assert isinstance(plugin, KboPlugin)
-    assert (plugin.sport_code, plugin.source_code) == ("baseball", "kbo_official")
-    assert {job: plugin.source_code_for(job) for job in ("schedule", "results", "boxscore", "season_stats",
-                                                        "standings")} == {
-        "schedule": "naver_sports", "results": "naver_sports", "boxscore": "naver_sports",
-        "season_stats": "kbo_official", "standings": "kbo_official"}
+    plugin = get_plugin("kbo_community")
+    assert isinstance(plugin, KboPlugin) and (plugin.sport_code, plugin.source_code) == ("baseball", "kbo_gh_stats")
+    assert {j: plugin.source_code_for(j) for j in ("schedule", "results", "season_stats", "standings")} == {
+        "schedule": "kbo_gh_schedule", "results": "kbo_gh_schedule",
+        "season_stats": "kbo_gh_stats", "standings": "kbo_gh_stats"}
 
 
-def test_fetch_schedule_splits_range_into_weeks():
-    session = FakeSession(fixture_routes())
-    docs = list(KboPlugin().fetch_schedule(make_ctx("schedule", session), date(2026, 9, 26), date(2026, 10, 12)))
-    assert [doc.external_key for doc in docs] == ["2026-09-26~2026-10-02", "2026-10-03~2026-10-09",
-                                                  "2026-10-10~2026-10-12"]
-    assert docs[0].request_params == {"fields": "basic,schedule,baseball", "fromDate": "2026-09-26",
-                                      "toDate": "2026-10-02", "categoryId": "kbo"}
+def test_fetch_schedule_months_and_missing_postseason():
+    session = FakeSession(routes())
+    docs = list(KboPlugin().fetch_schedule(make_ctx("schedule", session), date(2025, 10, 1), date(2025, 10, 31)))
+    assert [d.external_key for d in docs] == ["regular:2025-10", "postseason:2025-10"]
+    # 포스트시즌 파일이 아직 없으면(404) 조용히 건너뛴다
+    session = FakeSession({**routes(), f"{SCH}/2026/schedule_2026_10.json": raw("gh_postseason_2025_12_empty.json")})
+    docs = list(KboPlugin().fetch_schedule(make_ctx("schedule", session), date(2026, 9, 27), date(2026, 10, 3)))
+    assert [d.external_key for d in docs] == ["regular:2026-09", "postseason:2026-09", "regular:2026-10"]
+    # 정규시즌 파일 404 는 오류로 올린다
+    with pytest.raises(FetchError):
+        list(KboPlugin().fetch_schedule(make_ctx("schedule", FakeSession(routes())), date(2026, 11, 1),
+                                        date(2026, 11, 2)))
 
 
-def test_fetch_player_stats_bundles_team_pages():
-    session = FakeSession(fixture_routes())
+def test_fetch_match_summary_once_per_month_and_boxscore_unsupported():
+    session = FakeSession(routes())
     plugin = KboPlugin()
-    docs = list(plugin.fetch_player_stats(make_ctx("season_stats", session),
-                                          SeasonRef(league_code="KBO", label="2026", start_year=2026)))
-    assert len(docs) == 1 and docs[0].document_type == "team_season_stats"
-    assert session.calls.count("/robots.txt") == 1 and len(session.calls) == 5
-    bundle = plugin.normalize(docs[0], "KBO")
-    assert len(bundle.team_season_stats) == 3
+    ctx = make_ctx("results", session)
+    t1 = MatchTarget(external_id="20260901LGOB0", local_date=date(2026, 9, 1), status="final")
+    t2 = MatchTarget(external_id="20260902LGOB0", local_date=date(2026, 9, 2), status="final")
+    docs = list(plugin.fetch_match(ctx, t1, frozenset({"summary"}))) + \
+        list(plugin.fetch_match(ctx, t2, frozenset({"summary"})))
+    assert [d.external_key for d in docs] == ["regular:2026-09", "postseason:2026-09"]
+    with pytest.raises(NotSupported):
+        list(plugin.fetch_match(ctx, t1, frozenset({"summary", "boxscore"})))
 
 
-def test_normalize_dispatch_and_unknown_type():
+def test_stats_doc_current_and_past_season():
+    session = FakeSession(routes())
     plugin = KboPlugin()
-    doc = RawDocument(document_type="standings", external_key="2026", request_url="u",
-                      body=fixture_text("kbo_teamrank.html").encode(),
-                      fetched_at=datetime(2026, 9, 28, 16, 0, tzinfo=timezone.utc))
-    # 수집 시각 UTC 16:00 = 한국 9/29 01:00 → 순위 기준일 9/29
-    assert plugin.normalize(doc, "KBO").standings[0].as_of_date == date(2026, 9, 29)
+    ctx = make_ctx("season_stats", session)
+    cur = list(plugin.fetch_player_stats(ctx, SeasonRef("KBO", "2026", 2026)))[0]
+    assert cur.document_type == "season_stats" and cur.external_key == "2026"
+    assert len(plugin.normalize(cur, "KBO").player_season_stats) == 587
+    past = list(plugin.fetch_player_stats(ctx, SeasonRef("KBO", "1982", 1982)))[0]
+    assert len(plugin.normalize(past, "KBO").player_season_stats) == 141
+    st = list(plugin.fetch_standings(ctx, SeasonRef("KBO", "1982", 1982)))[0]
+    b = plugin.normalize(st, "KBO")
+    assert b.standings[0].as_of_date == date(1982, 12, 31) and len(b.standings) == 6
+
+
+def test_normalize_unknown_type():
     with pytest.raises(ValueError):
-        plugin.normalize(RawDocument(document_type="roster", external_key="k", request_url="u", body=b"{}",
-                                     fetched_at=datetime.now(timezone.utc)), "KBO")
+        KboPlugin().normalize(RawDocument(document_type="boxscore", external_key="k", request_url="u", body=b"{}",
+                                          fetched_at=datetime.now(KST)), "KBO")
 
 
 # ---------------------------------------------------------------------------
 # 통합: runner → writer → deriver (임시 DB)
 # ---------------------------------------------------------------------------
-NOW = datetime(2026, 9, 28, 23, 55, tzinfo=KST)
+NOW = datetime(2026, 9, 30, 6, 30, tzinfo=KST)
 
 
 @pytest.fixture(scope="module")
 def engine(db_url):
     eng = create_engine(db_url)
-    with eng.begin() as c:
-        c.execute(text("UPDATE ingest.data_source SET collection_allowed = true "
-                       "WHERE code IN ('naver_sports', 'kbo_official')"))
     yield eng
     eng.dispose()
 
@@ -310,7 +296,7 @@ class Env:
         self.sessions: list[FakeSession] = []
 
         def http_factory(policy):
-            session = FakeSession(fixture_routes())
+            session = FakeSession(routes())
             self.sessions.append(session)
             return PoliteHttpClient(policy, session=session, sleep=lambda s: None)
 
@@ -326,68 +312,66 @@ def q(engine, sql, **params):
 
 
 @pytest.mark.db
-def test_pipeline_schedule_boxscore_standings_team_stats(engine):
+def test_pipeline_schedule_results_stats_standings(engine):
     env = Env(engine)
-    r = env.run("schedule", date_from="2026-09-26", date_to="2026-09-28")
+    r = env.run("schedule", date_from="2026-09-27", date_to="2026-09-30")
     assert r.status == "success", r
-    assert r.counts["by_table"]["core.match.inserted"] == 5
-    assert r.counts["by_table"]["core.team.inserted"] == 8
-    assert any("kbo_unknown" in w for w in r.warnings)
+    by = r.counts["by_table"]
+    assert by["core.match.inserted"] == 108 and by["core.team.inserted"] == 10
+    assert r.counts["http_requests"] == 3                # robots + 9월 정규 + 9월 포스트시즌(빈 파일)
 
-    # 박스스코어: 종료 경기 3개 중 픽스처가 있는 1경기만 성공, 나머지는 404 → 경기 단위 오류로 partial
-    r = env.run("boxscore", recheck_days=2)
-    assert r.status == "partial", r
-    assert sum("HTTP 404" in w for w in r.warnings) == 2
-    assert r.counts["by_table"]["core.player_match_stat.inserted"] == 7
-    boxscore_calls = [c for c in env.sessions[-1].calls if c.endswith("/record")]
-    assert len(boxscore_calls) == 3                     # 예정·취소 경기는 요청하지 않는다
-    summary_calls = [c for c in env.sessions[-1].calls if c == "/schedule/games"]
-    assert len(summary_calls) == 3                      # 날짜별 1회 (26, 27, 28일)
-
-    rows = dict(q(engine, """
-        SELECT p.name_ko, s.stats FROM core.player_match_stat s JOIN core.player p ON p.id = s.player_id
-        WHERE p.name_ko IN ('가상타자1', '가상투수1')"""))
-    assert rows["가상투수1"]["pit.OUTS"] == 19 and rows["가상타자1"]["bat.PA"] == 5
-    # 파생 지표 (ERA = 27 * ER / OUTS)
-    era = q(engine, """
-        SELECT (s.derived->>'pit.ERA')::numeric FROM core.player_match_stat s JOIN core.player p ON p.id = s.player_id
-        WHERE p.name_ko = '가상투수1'""")[0][0]
-    assert round(float(era), 2) == round(27 * 2 / 19, 2)
-    # 선수 시즌 집계(박스스코어 합산)
-    agg = q(engine, """
-        SELECT s.stats FROM core.player_season_stat s JOIN core.player p ON p.id = s.player_id
-        WHERE p.name_ko = '가상타자1' AND s.origin = 'aggregated' AND s.team_id IS NOT NULL""")
-    assert agg and agg[0][0]["bat.HR"] == 1
-
-    # 순위·팀 시즌 기록은 KBO 공식 소스 — 네이버에서 만든 팀과 같은 행으로 연결되어야 한다
-    r = env.run("standings")
+    r = env.run("results", recheck_days=3)
     assert r.status == "success", r
+    assert r.counts["by_table"]["core.match.unchanged"] == 108
+    assert env.sessions[-1].calls.count(f"{SCH}/2026/schedule_2026_09.json") == 1
+
+    r = env.run("boxscore")
+    assert r.status == "success" and any("boxscore" in w for w in r.warnings)
+
     r = env.run("season_stats")
     assert r.status == "success", r
-    assert r.counts["by_table"]["core.team_season_stat.inserted"] == 3
-    assert q(engine, "SELECT count(*) FROM core.team")[0][0] == 8
-    mapped = q(engine, """
-        SELECT count(DISTINCT m.entity_id), count(DISTINCT ds.code)
-        FROM ingest.external_id_map m JOIN ingest.data_source ds ON ds.id = m.source_id
-        WHERE m.entity_type = 'team' AND m.external_id = 'LG'""")[0]
-    assert tuple(mapped) == (1, 2)
-    st = q(engine, """
-        SELECT s.rank, s.stats FROM core.standing s JOIN core.team t ON t.id = s.team_id
-        WHERE t.name_ko = 'LG 트윈스'""")  # 기준일은 실제 수집 시각(fetched_at) 기준이라 조건에서 뺀다
-    assert st and st[0][0] == 1 and st[0][1]["std.W"] == 84
-    runs = q(engine, """
+    by = r.counts["by_table"]
+    assert by["core.player.inserted"] == 587 and by["core.player_season_stat.inserted"] == 587
+    assert by["core.team_season_stat.inserted"] == 10
+    assert by.get("core.team.inserted", 0) == 0            # 일정에서 만든 팀과 같은 행으로 연결
+
+    r = env.run("standings")
+    assert r.status == "success", r
+    assert q(engine, "SELECT count(*) FROM core.team")[0][0] == 10
+
+    koo = q(engine, """
+        SELECT p.birth_date, s.stats, s.derived FROM core.player p
+        JOIN core.player_season_stat s ON s.player_id = p.id AND s.origin = 'collected'
+        WHERE p.name_ko = '구자욱'""")
+    assert str(koo[0][0]) == "1993-02-12" and koo[0][1]["bat.H"] == 155
+    assert koo[0][2]["bat.AVG"] == pytest.approx(155 / 419, abs=1e-3)    # 파생 지표 재계산
+    kt = q(engine, """
+        SELECT s.rank, s.stats, s.as_of_date FROM core.standing s JOIN core.team t ON t.id = s.team_id
+        WHERE t.code = 'KT'""")
+    assert kt[0][0] == 1 and kt[0][1]["std.W"] == 82 and str(kt[0][2]) == "2026-09-30"
+    consts = dict(q(engine, """
+        SELECT d.code, c.value FROM config.league_constant c
+        JOIN config.league_constant_definition d ON d.id = c.definition_id
+        JOIN core.season s ON s.id = c.season_id WHERE s.label = '2026'"""))
+    assert "LG_ERA" in consts and "FIP_C" in consts                      # 팀 기록 합계로 리그 상수 계산
+    runs = [tuple(x) for x in q(engine, """
         SELECT r.job_type, ds.code FROM ingest.ingest_run r JOIN ingest.data_source ds ON ds.id = r.source_id
-        ORDER BY r.id""")
-    assert [tuple(x) for x in runs] == [("schedule", "naver_sports"), ("boxscore", "naver_sports"),
-                                       ("standings", "kbo_official"), ("season_stats", "kbo_official")]
+        ORDER BY r.id""")]
+    assert runs == [("schedule", "kbo_gh_schedule"), ("results", "kbo_gh_schedule"), ("boxscore", "kbo_gh_schedule"),
+                    ("season_stats", "kbo_gh_stats"), ("standings", "kbo_gh_stats")]
 
 
 @pytest.mark.db
-def test_pipeline_events_not_supported_and_rerun_idempotent(engine):
+def test_pipeline_history_backfill_and_idempotent(engine):
     env = Env(engine)
-    r = env.run("events")
-    assert r.status == "success" and any("events" in w for w in r.warnings)
-    r = env.run("schedule", date_from="2026-09-26", date_to="2026-09-28")
+    r = env.run("season_stats", date="1982-06-01")
+    assert r.status == "success", r
+    assert any("미집계" in w for w in r.warnings)
+    lg_1982 = q(engine, """
+        SELECT count(*) FROM core.season_team st JOIN core.season s ON s.id = st.season_id
+        JOIN core.team t ON t.id = st.team_id WHERE s.label = '1982'""")[0][0]
+    assert lg_1982 == 6
+    r = env.run("season_stats")
     assert r.status == "success"
-    assert r.counts["by_table"].get("core.match.updated", 0) == 0
-    assert r.counts["by_table"]["core.match.unchanged"] == 5
+    assert r.counts["by_table"].get("core.player_season_stat.updated", 0) == 0
+    assert r.counts["by_table"]["core.player_season_stat.unchanged"] == 587

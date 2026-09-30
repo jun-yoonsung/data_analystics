@@ -1,0 +1,14 @@
+# KBO 경기 일정·결과 — GitHub 공개 저장소 comographer/kbo-crawler
+#  그 저장소가 매일 23:55 KST 에 GitHub Actions 로 KBO 일정 웹서비스 응답을 월별 JSON 으로 올린다.
+#  이 플랫폼은 raw.githubusercontent.com 에서 그 파일만 받는다 (KBO 사이트에는 요청하지 않음).
+code: kbo_gh_schedule
+name: KBO 일정·결과 (GitHub comographer/kbo-crawler)
+base_url: https://raw.githubusercontent.com/comographer/kbo-crawler/main
+robots_url: https://raw.githubusercontent.com/robots.txt
+terms_url: https://docs.github.com/site-policy/github-terms/github-terms-of-service
+terms_note: >-
+  2026-09-30 확인. raw.githubusercontent.com 은 robots.txt 가 없다(404 → 표준상 전체 허용).
+  공개 저장소 콘텐츠 열람은 GitHub 이용약관 범위이며 요청 간격을 지킨다. 저장소에 라이선스 파일이 없어
+  데이터 재배포 권리는 부여되지 않은 상태로 보고 내부(비공개) 분석용으로만 쓴다. 원천 데이터는 KBO 일정 서비스다.
+collection_allowed: true
+min_interval_ms: 3000

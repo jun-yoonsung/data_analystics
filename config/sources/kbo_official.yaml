@@ -1,12 +1,11 @@
-# KBO 공식 홈페이지 (순위표, 팀 시즌 기록)
-#  robots.txt 와 이용약관을 확인한 뒤 결과를 terms_note 에 기록하고,
-#  허용되는 경우에만 collection_allowed 를 true 로 바꾼다.
+# KBO 공식 홈페이지 — 현재 수집에 쓰지 않는다
+#  이 작업 환경에서 접속이 막혀 있고, 다른 공개 프로젝트들이 "KBO 는 사전 승인 없는 자동 수집을 robots.txt 로 금지한다"고
+#  기록하고 있어 직접 수집하지 않는다. KBO 리그는 GitHub 공개 데이터(kbo_gh_schedule, kbo_gh_stats)를 쓴다.
 code: kbo_official
 name: KBO 공식 홈페이지
 base_url: https://www.koreabaseball.com
 robots_url: https://www.koreabaseball.com/robots.txt
 terms_note: >-
-  미확인 (2026-09-30 기준, 작업 환경에서 접속 차단). 페이지 구조는 이전 kbo-dashboard 프로젝트의
-  파서 기준으로 구현했다. 약관(사이트 하단 이용약관)·robots.txt 확인 후 terms_url 과 결과를 기록할 것.
+  미확인 (작업 환경에서 접속 차단). 자동 수집 금지로 알려져 있어 사용하지 않음.
 collection_allowed: false
 min_interval_ms: 3000

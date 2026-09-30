@@ -1,0 +1,14 @@
+# KBO 선수·팀 시즌 기록, 순위, 선수 프로필 — GitHub 공개 저장소 PsyproLEE/KBO_statics
+#  그 저장소가 매일 00:30 KST(예약, 실제 반영은 04~05시경) GitHub Actions 로 KBO 기록실을 수집해 JSON 으로 올린다.
+#  현재 시즌 파일과 1982년부터의 지난 시즌 파일(season/{연도}.json)이 있다.
+code: kbo_gh_stats
+name: KBO 시즌 기록·순위 (GitHub PsyproLEE/KBO_statics)
+base_url: https://raw.githubusercontent.com/PsyproLEE/KBO_statics/main
+robots_url: https://raw.githubusercontent.com/robots.txt
+terms_url: https://docs.github.com/site-policy/github-terms/github-terms-of-service
+terms_note: >-
+  2026-09-30 확인. raw.githubusercontent.com 은 robots.txt 가 없다(404 → 표준상 전체 허용).
+  공개 저장소 콘텐츠 열람은 GitHub 이용약관 범위이며 요청 간격을 지킨다. 저장소에 라이선스 파일이 없어
+  데이터 재배포 권리는 부여되지 않은 상태로 보고 내부(비공개) 분석용으로만 쓴다. 원천 데이터는 KBO 기록실이다.
+collection_allowed: true
+min_interval_ms: 3000
