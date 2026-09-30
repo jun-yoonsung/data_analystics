@@ -11,6 +11,7 @@ dependencies = [
     "pyyaml>=6.0",
     "requests>=2.31",
     "croniter>=2.0",
+    "beautifulsoup4>=4.12",
     "celery[redis]>=5.3",
 ]
 

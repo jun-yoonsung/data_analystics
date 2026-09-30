@@ -6,7 +6,7 @@
   python -m app.cli sync-config                     # DB 반영
   python -m app.cli plugins                         # 등록된 수집 플러그인
   python -m app.cli collect --league KBO --job schedule --param days_back=7
-  python -m app.cli reprocess --league KBO [--document-type boxscore]   # 저장된 raw 로 재처리
+  python -m app.cli reprocess --league KBO [--document-type boxscore] [--job standings]   # 저장된 raw 로 재처리
   python -m app.cli dispatch [--dry-run]            # 지금 due 인 수집 작업 실행 (beat 없이 수동)
 """
 from __future__ import annotations
@@ -79,6 +79,9 @@ def _print_result(result) -> None:
         print(f"  ! {w}")
 
 
+JOB_CHOICES = ["schedule", "results", "boxscore", "events", "season_stats", "standings", "roster", "players"]
+
+
 def cmd_plugins(args: argparse.Namespace) -> int:
     from collectors.core.registry import registered_plugins
     plugins = registered_plugins()
@@ -105,7 +108,7 @@ def cmd_reprocess(args: argparse.Namespace) -> int:
     from collectors.core.runner import CollectionRunner, JobRequest
     params = {"document_type": args.document_type, "since": args.since}
     result = CollectionRunner(create_engine(get_database_url())).run(
-        JobRequest(league_code=args.league, job_type="schedule", trigger="reprocess",
+        JobRequest(league_code=args.league, job_type=args.job, trigger="reprocess",
                    params={k: v for k, v in params.items() if v}))
     _print_result(result)
     return 0 if result.status == "success" else 2
@@ -152,9 +155,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("plugins", help="등록된 수집 플러그인 목록").set_defaults(func=cmd_plugins)
     p_col = sub.add_parser("collect", help="리그 수집 작업 1회 실행")
     p_col.add_argument("--league", required=True)
-    p_col.add_argument("--job", required=True,
-                       choices=["schedule", "results", "boxscore", "events", "season_stats", "standings",
-                                "roster", "players"])
+    p_col.add_argument("--job", required=True, choices=JOB_CHOICES)
     p_col.add_argument("--param", action="append", metavar="KEY=VALUE",
                        help="작업 파라미터 (date_from=2026-04-01, days_back=7, recheck_days=3 ...)")
     p_col.add_argument("--backfill", action="store_true", help="과거 데이터 적재로 기록")
@@ -162,6 +163,8 @@ def main(argv: list[str] | None = None) -> int:
     p_re = sub.add_parser("reprocess", help="저장된 raw 원문을 현재 파서로 재처리 (소스 재요청 없음)")
     p_re.add_argument("--league", required=True)
     p_re.add_argument("--document-type")
+    p_re.add_argument("--job", default="schedule", choices=JOB_CHOICES,
+                      help="재처리할 원문의 소스를 고르는 기준 작업 (작업마다 소스가 다른 플러그인용, 기본 schedule)")
     p_re.add_argument("--since", help="이 시각 이후 수집된 원문만 (ISO 8601)")
     p_re.set_defaults(func=cmd_reprocess)
     p_dis = sub.add_parser("dispatch", help="due 수집 작업을 지금 실행 (Celery 없이)")

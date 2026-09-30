@@ -92,6 +92,15 @@ class CollectorPlugin(ABC):
     parser_version: ClassVar[int] = 1
     requires_browser: ClassVar[bool] = False   # 동적 페이지(Playwright) 필요 여부 → 워커 큐 분리
 
+    # ---- 소스 -------------------------------------------------------------
+    def source_code_for(self, job_type: str) -> str:
+        """작업에 쓰는 데이터 소스 코드. 기본은 source_code 하나.
+
+        작업마다 소스가 다른 플러그인(예: 일정은 A 사이트, 순위는 B 사이트)만 재정의한다.
+        수집 허용 여부·요청 간격·외부 ID 매핑은 이 소스 기준으로 적용된다.
+        """
+        return self.source_code
+
     # ---- 시즌 -------------------------------------------------------------
     def season_for_date(self, league_code: str, d: date) -> SeasonRef:
         """날짜가 속한 시즌. 기본은 단일 연도 시즌 (KBO, K리그). 연도를 넘는 리그는 재정의."""

@@ -131,7 +131,7 @@ class CollectionRunner:
                 plugin = self.plugin_factory(league.collector_key or "")
                 if plugin.sport_code != league.sport_code:
                     raise _Fatal(f"플러그인 {plugin.key} 종목({plugin.sport_code}) ≠ 리그 종목({league.sport_code})")
-                source = _source(conn, plugin.source_code)
+                source = _source(conn, plugin.source_code_for(req.job_type))
         except PluginNotFound as exc:
             return self.record_skip(req, str(exc))
         except _Fatal as exc:

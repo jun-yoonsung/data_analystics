@@ -13,13 +13,13 @@ league:
   collector_key: kbo_official
 
 schedules:
-  - {job_type: schedule,     source: kbo_official, cron: "10 6 * * *",  offseason_policy: weekly,
+  # 경기 단위 데이터는 네이버 스포츠 경기 API, 순위·팀 시즌 기록은 KBO 공식 사이트 (수집 플러그인의 source_code_for)
+  - {job_type: schedule,     source: naver_sports, cron: "10 6 * * *",  offseason_policy: weekly,
      params: {days_back: 3, days_ahead: 14}}
-  - {job_type: results,      source: kbo_official, cron: "50 23 * * *"}
-  - {job_type: boxscore,     source: kbo_official, cron: "55 23 * * *",
-     params: {recheck_days: 2, note: "다음 날 오전 정정 반영을 위해 최근 2일 재수집"}}
-  - {job_type: events,       source: kbo_official, cron: "20 0 * * *"}
-  - {job_type: season_stats, source: kbo_official, cron: "40 0 * * *"}
+  - {job_type: results,      source: naver_sports, cron: "50 23 * * *"}
+  - {job_type: boxscore,     source: naver_sports, cron: "55 23 * * *",
+     params: {recheck_days: 2, note: "다음 날 오전 정정 반영을 위해 최근 2일 재수집. results 작업 뒤에 실행"}}
+  - {job_type: season_stats, source: kbo_official, cron: "40 0 * * *",
+     params: {note: "팀 시즌 기록만. 선수 시즌 기록은 박스스코어 집계"}}
   - {job_type: standings,    source: kbo_official, cron: "45 0 * * *"}
-  - {job_type: roster,       source: kbo_official, cron: "10 18 * * *", offseason_policy: weekly,
-     params: {note: "1군 등록·말소 공시 반영"}}
+  # events(문자중계)·roster(1군 등록 현황)는 소스 구조가 확인되지 않아 수집기가 아직 지원하지 않는다

@@ -1,0 +1,36 @@
+{
+  "code": 200,
+  "success": true,
+  "result": {
+    "recordData": {
+      "gameInfo": {"hName": "두산", "aName": "LG"},
+      "battersBoxscore": {
+        "away": [
+          {"name": "가상타자1", "ab": 4, "hit": 2, "hr": 1, "rbi": 3, "run": 2, "sb": 0, "bb": 1, "kk": 1,
+           "inn1": "좌홈", "inn3": "중2", "inn5": "볼넷", "inn7": "삼진", "inn9": "유땅"},
+          {"name": "가상타자2", "ab": 3, "hit": 1, "hr": 0, "rbi": 1, "run": 1, "sb": 1, "bb": 0, "kk": 0,
+           "inn1": "사구", "inn4": "우3", "inn6": "중희비", "inn8": "2땅"},
+          {"name": "가상투수1", "ab": 0, "hit": 0, "hr": 0, "rbi": 0, "run": 0, "sb": 0, "bb": 0, "kk": 0}
+        ],
+        "home": [
+          {"name": "가상타자3", "ab": 4, "hit": 1, "hr": 0, "rbi": 2, "run": 0, "sb": 0, "bb": 0, "kk": 2,
+           "inn2": "삼진", "inn4": "투희번", "inn6": "좌안", "inn8": "삼진", "inn9": "1땅"}
+        ]
+      },
+      "pitchersBoxscore": {
+        "away": [
+          {"name": "가상투수1", "inn": "6 ⅓", "er": 2, "hit": 5, "r": 3, "bb": 2, "kk": 7, "hr": 1,
+           "pa": 26, "bf": 98, "gameCount": 25, "w": 11, "l": 6, "era": "3.12"},
+          {"name": "가상투수2", "inn": "2 ⅔", "er": 0, "hit": 1, "r": 0, "bb": 0, "kk": 3, "hr": 0,
+           "pa": 9, "bf": 31}
+        ],
+        "home": [
+          {"name": "가상투수3", "inn": "5", "er": 4, "hit": 7, "r": 5, "bb": 3, "kk": 4, "hr": 1,
+           "pa": 24, "bf": 91},
+          {"name": "가상투수4", "inn": "0 ⅓", "er": 0, "hit": 0, "r": 0, "bb": 0, "kk": 1, "hr": 0,
+           "pa": 1, "bf": 4}
+        ]
+      }
+    }
+  }
+}

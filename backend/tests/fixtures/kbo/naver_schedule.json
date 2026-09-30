@@ -1,0 +1,33 @@
+{
+  "code": 200,
+  "success": true,
+  "result": {
+    "games": [
+      {"gameId": "20260926LGOB02026", "roundCode": "kbo_r", "gameDateTime": "2026-09-26T17:00:00",
+       "homeTeamName": "두산", "awayTeamName": "LG", "homeTeamScore": 3, "awayTeamScore": 5,
+       "statusCode": "RESULT", "statusInfo": "경기종료", "stadium": "잠실",
+       "homeStarterName": "가상투수3", "awayStarterName": "가상투수1",
+       "winPitcherName": "가상투수1", "losePitcherName": "가상투수3", "broadChannel": "SPOTV"},
+      {"gameId": "20260926HTSS02026", "roundCode": "kbo_r", "gameDateTime": "2026-09-26T17:00:00",
+       "homeTeamName": "삼성", "awayTeamName": "KIA", "homeTeamScore": 4, "awayTeamScore": 4,
+       "statusCode": "RESULT", "statusInfo": "경기종료", "stadium": "대구",
+       "homeStarterName": "가상투수5", "awayStarterName": "가상투수6",
+       "winPitcherName": "", "losePitcherName": "", "broadChannel": "KBS N"},
+      {"gameId": "20260927SKHH12026", "roundCode": "kbo_r", "gameDateTime": "2026-09-27T14:00:00",
+       "homeTeamName": "한화", "awayTeamName": "SSG", "homeTeamScore": 2, "awayTeamScore": 1,
+       "statusCode": "RESULT", "statusInfo": "경기종료", "stadium": "대전"},
+      {"gameId": "20260927SKHH22026", "roundCode": "kbo_r", "gameDateTime": "2026-09-27T18:00:00",
+       "homeTeamName": "한화", "awayTeamName": "SSG", "homeTeamScore": 0, "awayTeamScore": 0,
+       "statusCode": "CANCEL", "statusInfo": "우천취소", "stadium": "대전"},
+      {"gameId": "20260928WONC02026", "roundCode": "kbo_r", "gameDateTime": "2026-09-28T18:30:00",
+       "homeTeamName": "NC", "awayTeamName": "키움", "homeTeamScore": 0, "awayTeamScore": 0,
+       "statusCode": "BEFORE", "statusInfo": "경기전", "stadium": "창원",
+       "homeStarterName": "가상투수7", "awayStarterName": "가상투수8"},
+      {"gameId": "20260711EASTWEST2026", "roundCode": "kbo_as", "gameDateTime": "2026-07-11T18:00:00",
+       "homeTeamName": "나눔", "awayTeamName": "드림", "homeTeamScore": 6, "awayTeamScore": 7,
+       "statusCode": "RESULT", "stadium": "사직"},
+      {"gameId": "20261005KTLT02026", "roundCode": "kbo_unknown", "gameDateTime": "2026-10-05T14:00:00",
+       "homeTeamName": "롯데", "awayTeamName": "KT", "statusCode": "BEFORE", "stadium": "사직"}
+    ]
+  }
+}

@@ -1,10 +1,12 @@
-# KBO 공식 홈페이지
-#  3단계(야구 수집기)에서 robots.txt 와 이용약관을 확인한 뒤 결과를 terms_note 에 기록하고
+# KBO 공식 홈페이지 (순위표, 팀 시즌 기록)
+#  robots.txt 와 이용약관을 확인한 뒤 결과를 terms_note 에 기록하고,
 #  허용되는 경우에만 collection_allowed 를 true 로 바꾼다.
 code: kbo_official
 name: KBO 공식 홈페이지
 base_url: https://www.koreabaseball.com
 robots_url: https://www.koreabaseball.com/robots.txt
-terms_note: 미확인 (3단계에서 확인 예정)
+terms_note: >-
+  미확인 (2026-09-30 기준, 작업 환경에서 접속 차단). 페이지 구조는 이전 kbo-dashboard 프로젝트의
+  파서 기준으로 구현했다. 약관(사이트 하단 이용약관)·robots.txt 확인 후 terms_url 과 결과를 기록할 것.
 collection_allowed: false
 min_interval_ms: 3000
